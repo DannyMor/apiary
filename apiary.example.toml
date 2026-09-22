@@ -1,0 +1,11 @@
+# Copy to ~/.config/apiary/apiary.toml (or point APIARY_CONFIG at it).
+# Every key is optional; these are the defaults.
+
+[paths]
+claude_dir  = "~/.claude/projects"          # where Claude Code writes transcripts
+db          = "~/.local/share/apiary/apiary.db"  # Apiary's own index
+archive_dir = "~/.local/share/apiary/archive"  # archived transcripts and summaries
+
+[server]
+host = "127.0.0.1"
+port = 7431
