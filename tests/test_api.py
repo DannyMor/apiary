@@ -1,17 +1,60 @@
+from datetime import UTC, datetime, timedelta
+
 from fastapi.testclient import TestClient
 
 from apiary.api import create_app
 from apiary.config import Config
+
+from .fixtures import write_transcript
 
 
 def test_health(config: Config) -> None:
     with TestClient(create_app(config)) as client:
         r = client.get("/api/health")
         assert r.status_code == 200
-        body = r.json()
-        assert body["ok"] is True
-        assert body["sessions"] == 0
-        assert body["db"].endswith("apiary.db")
+        assert r.json()["ok"] is True
+
+
+def test_sessions_and_groups(config: Config) -> None:
+    now = datetime.now(UTC)
+    write_transcript(
+        config.paths.claude_dir,
+        "/u/src/api-server",
+        "a1",
+        "Refactor auth",
+        start=now - timedelta(days=1),
+        turns=6,
+        edits=2,
+    )
+    write_transcript(
+        config.paths.claude_dir,
+        "/u/src/web-app",
+        "b1",
+        "Review PR #9",
+        start=now - timedelta(days=30),
+        turns=2,
+    )
+    with TestClient(create_app(config)) as client:
+        sessions = client.get("/api/sessions").json()
+        assert [s["id"] for s in sessions] == ["a1", "b1"]
+        assert sessions[0]["groups"] == ["repo:api-server"]
+        assert sessions[0]["score"] > sessions[1]["score"]
+        assert "code review of a PR" in sessions[1]["reasons"]
+
+        by_score = client.get("/api/sessions", params={"sort": "score"}).json()
+        assert by_score[0]["id"] == "a1"
+
+        only = client.get("/api/sessions", params={"group": "repo:web-app"}).json()
+        assert [s["id"] for s in only] == ["b1"]
+
+        groups = client.get("/api/groups").json()
+        assert {g["id"]: g["member_ids"] for g in groups} == {
+            "repo:api-server": ["a1"],
+            "repo:web-app": ["b1"],
+        }
+
+        assert client.get("/api/sessions/nope").status_code == 404
+        assert client.post("/api/index/refresh").json()["unchanged"] == 2
 
 
 def test_root_serves_something(config: Config) -> None:

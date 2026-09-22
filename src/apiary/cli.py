@@ -53,6 +53,25 @@ def serve(
         uvicorn.run(create_app(cfg), host=h, port=p)
 
 
+@app.command()
+def index(config: ConfigOpt = None) -> None:
+    """Index transcripts once and print what changed."""
+    from apiary.db import connect
+    from apiary.indexer import index_all
+
+    cfg = Config.load(config)
+    cfg.ensure_dirs()
+    conn = connect(cfg.paths.db)
+    try:
+        r = index_all(conn, cfg.paths.claude_dir)
+    finally:
+        conn.close()
+    typer.echo(
+        f"scanned {r.scanned}, indexed {r.indexed}, unchanged {r.unchanged}, "
+        f"purged {r.purged} in {r.duration_s:.2f}s  ({cfg.paths.claude_dir})"
+    )
+
+
 @app.command(name="config")
 def show_config(config: ConfigOpt = None) -> None:
     """Print the effective configuration."""

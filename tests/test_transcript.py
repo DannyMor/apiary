@@ -1,0 +1,47 @@
+from datetime import UTC, datetime
+from pathlib import Path
+
+from apiary.transcript import read_transcript, repo_name_from_dir, repo_path_from_dir
+
+from .fixtures import write_transcript
+
+
+def test_reads_facts(tmp_path: Path) -> None:
+    start = datetime(2026, 9, 1, 10, 0, tzinfo=UTC)
+    p = write_transcript(
+        tmp_path, "/Users/me/src/api-server", "abc", "Refactor auth middleware", start=start, turns=6, edits=2
+    )
+    f = read_transcript(p)
+    assert f.session_id == "abc"
+    assert f.cwd == "/Users/me/src/api-server"
+    assert f.branch == "main"
+    assert f.title == "Refactor auth middleware"
+    assert f.msg_count == 6
+    assert f.tool_calls == 2
+    assert f.files_edited == {"/src/f2.py", "/src/f1.py"}
+    assert f.first_ts == start.timestamp()
+    assert f.last_ts == start.timestamp() + 5 * 180
+
+
+def test_summary_becomes_title_when_no_user_text(tmp_path: Path) -> None:
+    p = tmp_path / "x.jsonl"
+    p.write_text(
+        '{"type":"summary","summary":"Investigated OOM in worker"}\n'
+        '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hi"}]},'
+        '"timestamp":"2026-09-01T10:00:00Z"}\n'
+    )
+    assert read_transcript(p).title == "Investigated OOM in worker"
+
+
+def test_tolerates_garbage(tmp_path: Path) -> None:
+    p = tmp_path / "x.jsonl"
+    p.write_text('not json\n{"type":"user","message":{"role":"user","content":"hello"}}\n[1,2]\n')
+    f = read_transcript(p)
+    assert f.msg_count == 1
+    assert f.title == "hello"
+
+
+def test_dir_decoding() -> None:
+    d = Path("/x/-Users-me-src-api-server")
+    assert repo_name_from_dir(d) == "server"  # segments are ambiguous; cwd inside the file is preferred
+    assert repo_path_from_dir(d) == "/Users/me/src/api/server"

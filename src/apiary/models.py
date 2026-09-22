@@ -29,6 +29,15 @@ class Session(BaseModel):
     transcript: str
 
 
+class SessionOut(Session):
+    """A session as served: the row plus what the UI needs alongside it."""
+
+    score: int = 0
+    reasons: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    groups: list[str] = Field(default_factory=list)
+
+
 class Group(BaseModel):
     id: str
     name: str
