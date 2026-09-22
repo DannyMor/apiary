@@ -1,0 +1,21 @@
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+
+# apiary runtime
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+apiary.toml
+
+# editors / os
+.idea/
+.vscode/
+.DS_Store
