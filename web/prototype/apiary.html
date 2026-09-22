@@ -1,0 +1,1605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Apiary — your Claude Code sessions, kept like bees</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#e9eef3; --ground:#dbe2e8; --panel:#ffffff; --panel-2:#f0f4f8; --panel-3:#e3e9f0; --border:#d6dee7;
+  --text:#16212c; --muted:#5f6f80; --accent:#2b4e78; --accent-ink:#fff; --danger:#b3423a; --ok:#2f8f6a;
+  --shadow:0 8px 30px rgba(20,30,40,.18);
+  --font:'Manrope',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#14202b; --ground:#182633; --panel:#1a2836; --panel-2:#213241; --panel-3:#27394b; --border:#2c3f50;
+    --text:#e8eef3; --muted:#8fa2b3; --accent:#7fb0e8; --accent-ink:#0f1a26; --danger:#e07b72; --ok:#5fc39a;
+    --shadow:0 10px 36px rgba(0,0,0,.45);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#14202b; --ground:#182633; --panel:#1a2836; --panel-2:#213241; --panel-3:#27394b; --border:#2c3f50;
+  --text:#e8eef3; --muted:#8fa2b3; --accent:#7fb0e8; --accent-ink:#0f1a26; --danger:#e07b72; --ok:#5fc39a;
+  --shadow:0 10px 36px rgba(0,0,0,.45);
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{height:100%;margin:0}
+*,*::before,*::after{box-sizing:inherit}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.4;overflow:hidden}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+#app{display:grid;grid-template-columns:312px 1fr;height:100%}
+@media (max-width:820px){#app{grid-template-columns:1fr}#tray{display:none}}
+
+/* ---------- tray ---------- */
+#tray{position:relative;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;min-height:0;--apiary:linear-gradient(90deg,#d4557a,#e07a4a,#2f9e6a,#2b8fb3,#4c6fd6,#a35bd0)}
+.tray-head{padding:14px 14px 12px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:10px;background:var(--panel-2)}
+.brand{display:flex;align-items:center;gap:9px}
+.brand .mark{width:22px;height:22px;flex:none}
+.brand .mark path{stroke:none}
+.brand .mark .m1{fill:var(--c0,#d4557a)}.brand .mark .m2{fill:var(--c1,#2b8fb3)}.brand .mark .m3{fill:var(--c2,#a35bd0)}
+.brand h1{font-size:19px;font-weight:700;letter-spacing:-.01em;margin:0}
+.brand span{color:var(--muted);font-size:12px;margin-left:auto}
+svg.i,.modes svg,.seg svg,.toolbar svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+/* view mode: the one colorful element, filled with the apiary's own palette */
+.modes{display:flex;gap:4px;padding:4px;border-radius:12px;background:var(--panel-3);position:relative}
+.modes button{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;border:0;background:transparent;padding:8px 10px;border-radius:9px;color:var(--muted);font-weight:700;font-size:13px;position:relative;isolation:isolate}
+.modes button::before{content:"";position:absolute;inset:0;border-radius:9px;background:var(--accent);opacity:0;transition:opacity .15s;z-index:-1}
+.modes button.on{color:var(--accent-ink)}
+.modes button.on::before{opacity:1}
+.modes button.on svg{stroke:var(--accent-ink)}
+.modes button:not(.on):hover{color:var(--text)}
+
+.seg{display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--panel)}
+.seg button{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;border:0;background:transparent;padding:6px 9px;color:var(--muted);font-weight:600;font-size:12px}
+.seg button+button{border-left:1px solid var(--border)}
+.seg button.on{background:color-mix(in oklab, var(--accent) 12%, var(--panel));color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent)}
+
+.toolbar{display:flex;gap:6px;align-items:stretch}
+.search{flex:1;display:flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:0 9px;color:var(--muted);min-width:0}
+.search input{flex:1;min-width:0;border:0;background:transparent;padding:7px 0;color:var(--text)}
+.search input:focus{outline:none}
+.search:focus-within{border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent)}
+.tool{position:relative;width:36px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:8px;background:var(--panel);color:var(--muted)}
+.tool:hover{color:var(--text);border-color:var(--muted)}
+.tool.on{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.tool .badge{position:absolute;top:-6px;right:-6px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--accent);color:var(--accent-ink);font-size:10px;font-weight:700;display:none;align-items:center;justify-content:center;line-height:1}
+.tool .badge.on{display:flex}
+.pill{flex:1;display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:0 6px 0 9px;color:var(--muted);min-width:0}
+.pill select{flex:1;min-width:0;border:0;background:transparent;padding:7px 0;color:var(--text);font-weight:600;font-size:12px;appearance:none;-webkit-appearance:none;cursor:pointer}
+.pill::after{content:"";width:6px;height:6px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:rotate(45deg) translateY(-2px);flex:none}
+.pill:hover{border-color:var(--muted)}
+#ctl-sessions{display:flex;flex-direction:column;gap:8px}
+.tray-body{flex:1;overflow:auto;padding:6px 8px 12px}
+.frow{display:flex;gap:6px;align-items:center}
+.frow .btn{padding:5px 9px;font-size:12px}
+.fpanel{display:none;padding:10px;background:var(--panel-2);border:1px solid var(--border);border-radius:8px;flex-direction:column;gap:10px}
+.fpanel.on{display:flex}
+.fsec{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted)}
+.fsec b{color:var(--text);font-weight:600}
+.fsec select{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text)}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chips button{display:flex;align-items:center;gap:5px;border:1px solid var(--border);background:var(--panel);border-radius:14px;padding:3px 9px;font-size:12px;color:var(--muted)}
+.chips button.on{color:var(--accent);border-color:var(--accent);background:color-mix(in oklab, var(--accent) 10%, var(--panel))}
+.chips button .dot{width:8px;height:8px;border-radius:50%}
+.dual{display:flex;gap:8px}
+.dual input{flex:1;min-width:0}
+.ghead .secsel{border:0;background:transparent;color:var(--muted);padding:0 2px;display:flex}
+.ghead .secsel svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+.ghead .secsel:hover,.ghead .secsel.all,.ghead .secsel.some{color:var(--accent)}
+.row.dim{opacity:.45}
+.row .tags{display:flex;flex-wrap:wrap;gap:3px;margin-top:2px}
+.row .tags span{font-size:10px;line-height:1.4;padding:0 5px;border-radius:4px;background:var(--panel-2);border:1px solid var(--border);color:var(--muted)}
+.row.sel .tags span{background:var(--panel)}
+.chips button.auto{border-style:dashed}
+.tagedit{display:flex;gap:6px}
+.tagedit input{flex:1;background:var(--panel-2);border:1px solid var(--border);border-radius:7px;padding:8px 10px}
+
+.ghead{display:flex;align-items:center;gap:8px;padding:8px 8px 7px;position:sticky;top:0;z-index:1;margin-top:6px;border-radius:7px;background:color-mix(in oklab, var(--gc, var(--panel-2)) 14%, var(--panel-2))}
+.ghead:first-child{margin-top:0}
+.ghead .caret{border:0;background:transparent;color:var(--muted);width:18px;padding:0;transition:transform .15s}
+.ghead.closed .caret{transform:rotate(-90deg)}
+.ghead .swatch{width:16px;height:16px;border-radius:5px;border:0;padding:0;flex:none;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+.ghead .gname{font-weight:700;flex:1;text-align:left;border:0;background:transparent;padding:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ghead .gname:hover{color:var(--accent)}
+.ghead .count{color:var(--muted);font-size:12px}
+.ghead .edit{border:0;background:transparent;color:var(--muted);padding:0 3px;display:flex}
+.ghead .edit svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.ghead .edit:hover{color:var(--text)}
+.members{display:flex;flex-wrap:wrap;gap:4px;max-height:130px;overflow:auto;margin-top:4px}
+.member{display:inline-flex;align-items:center;gap:5px;font-size:12px;background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:2px 4px 2px 6px;max-width:100%}
+.member i{width:4px;height:12px;border-radius:2px;background:var(--rowc);flex:none}
+.member button{border:0;background:transparent;color:var(--muted);padding:0 2px;font-size:13px;line-height:1}
+.member button:hover{color:var(--danger)}
+.ghead .kind{font-size:11px;color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:0 5px}
+
+.row{display:grid;grid-template-columns:5px 1fr auto;gap:10px;align-items:center;padding:6px 6px 6px 4px;border-radius:6px;cursor:pointer;position:relative}
+.row:hover{background:color-mix(in oklab, var(--rowc) 10%, var(--panel-2))}
+.row.sel{background:color-mix(in oklab, var(--rowc) 22%, var(--panel-2))}
+.row .bar{width:5px;height:30px;border-radius:3px;align-self:center}
+.row .body{min-width:0;display:flex;flex-direction:column;gap:1px}
+.row .title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .meta{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .right{display:flex;align-items:center;gap:8px}
+.row .score{font-size:11px;font-weight:700;min-width:26px;text-align:center;padding:2px 6px;border-radius:9px;color:var(--muted);background:var(--panel-2)}
+.row .score.hi{color:var(--ok);background:color-mix(in oklab, var(--ok) 14%, var(--panel))}
+.row .score.lo{color:var(--danger);background:color-mix(in oklab, var(--danger) 12%, var(--panel))}
+.row .pulse{width:8px;height:8px;border-radius:50%;background:var(--pc);box-shadow:0 0 0 0 var(--pc);animation:pulse 1.8s ease-out infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 var(--pc)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
+.row.ghost .title{color:var(--muted)}
+.empty{color:var(--muted);padding:24px 10px;text-align:center}
+
+.selbar{display:none;flex:none;flex-direction:column;gap:7px;padding:8px 10px 10px;border-top:2px solid var(--accent);background:color-mix(in oklab, var(--accent) 8%, var(--panel))}
+.selbar.on{display:flex}
+.selbar .top{display:flex;align-items:center;justify-content:space-between}
+.selbar .n{font-weight:700;font-size:12px}
+.selbar .acts{display:flex;gap:6px}
+.selbar .acts .btn{flex:1;min-width:0;padding:6px 6px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.selbar .btn.quiet{padding:2px 6px;font-size:14px;line-height:1}
+.btn{border:1px solid var(--border);background:var(--panel);border-radius:7px;padding:6px 10px;font-weight:600;font-size:13px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.quiet{border-color:transparent;color:var(--muted)}
+.btn.danger{color:var(--danger)}
+.btn:disabled{opacity:.5;cursor:default}
+
+/* GC tab */
+.gc-head{padding:10px 8px 4px;color:var(--muted);font-size:12px}
+.gc-head input[type=range]{width:100%}
+.gcard{border:1px solid var(--border);border-radius:9px;padding:9px 10px;margin:6px 0;background:var(--panel);box-shadow:0 1px 2px rgba(20,30,40,.06)}
+.gcard .top{display:flex;align-items:center;gap:8px}
+.gcard .bar{width:5px;height:22px;border-radius:3px}
+.gcard .title{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gcard .sc{font-weight:700;font-size:13px;padding:1px 7px;border-radius:10px;background:var(--panel);border:1px solid var(--border)}
+.gcard .why{display:flex;flex-wrap:wrap;gap:4px;margin:7px 0 8px}
+.gcard .why span{font-size:11px;color:var(--muted);background:var(--panel);border-radius:4px;padding:1px 6px}
+.gcard .acts{display:flex;gap:6px}
+.gcard .acts .btn{padding:4px 8px;font-size:12px}
+
+/* ---------- world ---------- */
+#world{position:relative;min-width:0;overflow:hidden;
+  --bg:#f4f6f8; --panel:#ffffff; --panel-2:#eef1f4; --border:#d5dce3; --text:#1c2730; --muted:#5c6b78; --accent:#243140; --accent-ink:#fff; --shadow:0 8px 30px rgba(20,30,40,.14)}
+#world canvas{display:block;width:100%;height:100%;touch-action:none}
+#labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.lbl{position:absolute;transform:translate(-50%,-100%);white-space:nowrap;pointer-events:none;will-change:transform}
+.lbl.group{font-weight:700;font-size:15px;color:var(--text);text-shadow:0 1px 0 var(--bg),0 0 8px var(--bg)}
+.lbl.group small{display:block;font-weight:500;font-size:11px;color:var(--muted);text-align:center}
+.lbl.sess{font-size:12px;font-weight:600;color:var(--text);background:color-mix(in oklab, var(--panel) 85%, transparent);border:1px solid var(--border);padding:2px 7px;border-radius:5px}
+.lbl.sess.hot{background:var(--text);color:var(--bg);border-color:transparent}
+.lbl.hidden{display:none}
+
+#minimap{position:absolute;top:12px;right:12px;width:196px;background:color-mix(in oklab, var(--panel) 88%, transparent);border:1px solid var(--border);border-radius:10px;padding:8px;box-shadow:var(--shadow)}
+#minimap svg{display:block;width:100%;height:auto}
+#camctl{position:absolute;top:184px;right:12px;width:196px;display:flex;gap:6px}
+#camctl button{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:color-mix(in oklab, var(--panel) 88%, transparent);border:1px solid var(--border);border-radius:8px;padding:7px 8px;font-size:12px;font-weight:600;color:var(--text);box-shadow:var(--shadow)}
+#camctl button:hover{border-color:var(--muted)}
+#camctl svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linejoin:round}
+#camctl .wdot{width:14px;height:14px;border-radius:50%;background:var(--bg);box-shadow:inset 0 0 0 1.5px var(--muted)}
+.wopts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.wopts input[type=color]{width:36px;height:30px;border:1px solid var(--border);border-radius:7px;padding:2px;background:var(--panel-2)}
+#minimap polygon{cursor:pointer;stroke:var(--bg);stroke-width:1.2}
+#minimap polygon.focus{stroke:var(--text);stroke-width:2.5}
+#minimap text{font-size:7px;font-weight:700;fill:var(--text);pointer-events:none;text-anchor:middle}
+#minimap .cam{fill:none;stroke:var(--text);stroke-width:1.5}
+
+#hud{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:color-mix(in oklab, var(--panel) 80%, transparent);border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--muted);white-space:nowrap;max-width:calc(100% - 24px);overflow:hidden;text-overflow:ellipsis}
+#legend{position:absolute;left:12px;top:12px;background:color-mix(in oklab, var(--panel) 80%, transparent);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:3px}
+#legend b{color:var(--text)}
+#toast{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:8px 14px;border-radius:8px;font-weight:600;opacity:0;transition:opacity .2s;pointer-events:none;max-width:70%}
+#toast.on{opacity:1}
+
+/* ---------- modal ---------- */
+#modal{position:fixed;inset:0;background:rgba(10,16,22,.55);display:none;align-items:center;justify-content:center;z-index:10;padding:16px}
+#modal.on{display:flex}
+.dialog{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px;width:min(420px,100%);box-shadow:var(--shadow);max-height:90vh;overflow:auto}
+.dialog h3{margin:0 0 12px;font-size:16px}
+.dialog .field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.dialog .field span{font-size:12px;color:var(--muted)}
+.dialog input[type=text]{background:var(--panel-2);border:1px solid var(--border);border-radius:7px;padding:8px 10px}
+.dialog .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.dialog pre{background:var(--panel-2);border:1px solid var(--border);border-radius:8px;padding:10px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;max-height:260px;overflow:auto}
+
+.picker .sugg{display:flex;gap:8px;margin-bottom:10px;align-items:center}
+.picker .sugg span{font-size:12px;color:var(--muted);margin-right:2px}
+.picker .sugg button{width:28px;height:28px;border-radius:7px;border:2px solid transparent;padding:0}
+.picker .sugg button.on{border-color:var(--text)}
+.picker canvas{width:100%;height:120px;border-radius:8px;display:block;cursor:crosshair;border:1px solid var(--border)}
+.picker .lrow{display:flex;align-items:center;gap:10px;margin-top:10px}
+.picker .lrow input{flex:1}
+.picker .prev{display:flex;align-items:center;gap:10px;margin-top:10px}
+.picker .prev .sw{width:40px;height:40px;border-radius:9px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)}
+.picker .prev .txt{display:flex;flex-direction:column;font-size:12px;color:var(--muted)}
+.picker .prev .txt b{color:var(--text);font-size:13px}
+.picker .prev .warn{color:var(--danger)}
+
+@media (prefers-reduced-motion: reduce){.row .pulse{animation:none}.ghead .caret{transition:none}}
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="tray">
+    <div class="tray-head">
+      <div class="brand">
+        <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+          <path class="m1" d="M11 3l6 3.5v7L11 17l-6-3.5v-7z"/><path class="m2" d="M23 10l6 3.5v7L23 24l-6-3.5v-7z"/><path class="m3" d="M11 17l6 3.5v7L11 31l-6-3.5v-7z"/>
+        </svg>
+        <h1>Apiary</h1><span>prototype, mock data</span>
+      </div>
+
+      <div class="modes" id="tabs" role="tablist" aria-label="View mode">
+        <button data-tab="sessions" class="on" role="tab"><svg viewBox="0 0 16 16"><path d="M8 1.5l3 1.7v3.6L8 8.5 5 6.8V3.2zM3 6l3 1.7v3.6L3 13 0 11.3V7.7zM13 6l3 1.7v3.6L13 13l-3-1.7V7.7z" transform="translate(0 1)"/></svg>Sessions</button>
+        <button data-tab="gc" role="tab" title="The keeper: what to cull"><svg viewBox="0 0 16 16"><path d="M2.5 4.5h11M6 4.5V3h4v1.5M4 4.5l.8 9h6.4l.8-9M6.5 7v4.5M9.5 7v4.5"/></svg>Keeper</button>
+      </div>
+
+      <div id="ctl-sessions">
+        <div class="seg lens" id="lens" role="group" aria-label="Column height shows">
+          <button data-lens="recency" class="on"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></svg>Recency</button>
+          <button data-lens="score"><svg viewBox="0 0 16 16"><path d="M2 13.5h12M4 13.5V9M8 13.5V4M12 13.5V7"/></svg>Score</button>
+        </div>
+
+        <div class="toolbar">
+          <label class="search"><svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg><input id="fq" type="search" placeholder="Search sessions" aria-label="Search sessions"></label>
+          <button class="tool" id="ftoggle" title="Filters" aria-expanded="false"><svg viewBox="0 0 16 16"><path d="M2 4h12M4.5 8h7M7 12h2"/></svg><span class="badge" id="fcount"></span></button>
+          <button class="tool" id="btn-newgroup-top" title="New swarm"><svg viewBox="0 0 16 16"><path d="M8 1.5l5.6 3.25v6.5L8 14.5l-5.6-3.25v-6.5z"/><path d="M8 5.5v5M5.5 8h5"/></svg></button>
+        </div>
+        <div class="toolbar">
+          <label class="pill" title="Group by"><svg viewBox="0 0 16 16"><path d="M2 3.5h12M2 8h12M2 12.5h7"/></svg>
+            <select id="groupby">
+              <option value="group">Hive / swarm</option>
+              <option value="date">Date</option>
+              <option value="score">Score range</option>
+              <option value="none">No grouping</option>
+            </select>
+          </label>
+          <label class="pill" title="Order by"><svg viewBox="0 0 16 16"><path d="M5 2.5v11M5 13.5L2.5 11M5 13.5L7.5 11M10 4h4M10 8h3M10 12h2"/></svg>
+            <select id="sort">
+              <option value="lastActive">Last active</option>
+              <option value="created">Created</option>
+              <option value="score">Score</option>
+              <option value="name">Name</option>
+            </select>
+          </label>
+        </div>
+
+        <div id="fpanel" class="fpanel">
+          <div class="fsec"><span>Hives and swarms</span><div id="fgroups" class="chips"></div></div>
+          <div class="fsec"><span>Score <b id="fscore-lbl">0 to 100</b></span><div class="dual"><input type="range" id="fsmin" min="0" max="100" value="0" aria-label="Minimum score"><input type="range" id="fsmax" min="0" max="100" value="100" aria-label="Maximum score"></div></div>
+          <div class="fsec"><span>Active within</span><select id="fwithin"><option value="">Any time</option><option value="1">Today</option><option value="7">Past week</option><option value="14">Past two weeks</option><option value="30">Past month</option><option value="60">Past two months</option></select></div>
+          <div class="fsec"><span>Labels</span><div class="chips" id="fkinds"></div></div>
+          <div class="frow"><button class="btn" id="fselect">Select all shown</button><button class="btn quiet" id="fclear">Clear filters</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="tray-body" id="list"></div>
+    <div class="selbar" id="selbar">
+      <div class="top"><div class="n" id="seln">0 selected</div><button class="btn quiet" id="btn-clear" title="Clear selection">×</button></div>
+      <div class="acts">
+        <button class="btn primary" id="btn-newgroup" title="New swarm from selection">New swarm</button>
+        <select id="addto" class="btn" title="Add to an existing group"><option value="">Add to…</option></select>
+        <button class="btn" id="btn-tags">Labels</button>
+      </div>
+    </div>
+  </aside>
+  <main id="world">
+    <div id="labels"></div>
+    <div id="legend"><b id="legend-title">Height: recency</b><span>Each hive is a repo, each cell a session</span><span>Tall and vivid: touched recently</span><span>Low and grey: idle for weeks</span><span>Glowing: running now</span><span>Faint outline: on loan to a swarm</span></div>
+    <div id="minimap"></div>
+    <div id="camctl">
+      <button data-view="top" title="Straight down, like the map"><svg viewBox="0 0 16 16"><path d="M8 1.5l5.5 3.2v6.6L8 14.5l-5.5-3.2V4.7z"/></svg>Top</button>
+      <button data-view="overview" title="Angled view of every region"><svg viewBox="0 0 16 16"><path d="M1.5 11.5L8 8l6.5 3.5M8 8V2.5M3 5.5l5-3 5 3"/></svg>Overview</button>
+      <button id="worldcolor" title="World color" style="flex:0 0 36px"><span class="wdot"></span></button>
+    </div>
+    <div id="hud">Drag to orbit, right-drag or shift-drag to pan, wheel to zoom. Click a cell to focus it, shift-click to select several, double-click empty space to see the whole apiary.</div>
+    <div id="toast"></div>
+  </main>
+</div>
+<div id="modal"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+'use strict';
+if (!window.THREE) { document.getElementById('hud').textContent = 'three.js failed to load, so the world cannot render. Check the network and reload.'; return; }
+
+// ============================================================ utilities
+const $ = s => document.querySelector(s);
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+const lerp = (a,b,t) => a + (b-a)*t;
+const esc = s => String(s).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+const NOW = Date.now();
+const DAY = 86400000;
+let seed = 1337;
+const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+const pick = arr => arr[Math.floor(rnd()*arr.length)];
+
+function ageText(ms){
+  const d = (NOW - ms) / DAY;
+  if (d < 1/24) return 'minutes ago';
+  if (d < 1) return Math.round(d*24) + 'h ago';
+  if (d < 30) return Math.round(d) + 'd ago';
+  return Math.round(d/7) + 'w ago';
+}
+
+// ============================================================ color (OKLCH)
+function oklchToLinear(L, C, h){
+  const a = C*Math.cos(h*Math.PI/180), b = C*Math.sin(h*Math.PI/180);
+  const l_ = L + 0.3963377774*a + 0.2158037573*b;
+  const m_ = L - 0.1055613458*a - 0.0638541728*b;
+  const s_ = L - 0.0894841775*a - 1.2914855480*b;
+  const l = l_*l_*l_, m = m_*m_*m_, s = s_*s_*s_;
+  return [
+    4.0767416621*l - 3.3077115913*m + 0.2309699292*s,
+   -1.2684380046*l + 2.6097574011*m - 0.3413193965*s,
+   -0.0041960863*l - 0.7034186147*m + 1.7076147010*s
+  ];
+}
+function gamutMap(col){
+  let c = col.c;
+  for (let i=0;i<40;i++){
+    const rgb = oklchToLinear(col.l, c, col.h);
+    if (rgb.every(v => v >= -0.002 && v <= 1.002)) return rgb.map(v => clamp(v,0,1));
+    c *= 0.9;
+  }
+  return oklchToLinear(col.l, 0, col.h).map(v => clamp(v,0,1));
+}
+const lin2srgb = v => v <= 0.0031308 ? 12.92*v : 1.055*Math.pow(v, 1/2.4) - 0.055;
+function cssOf(col){
+  const [r,g,b] = gamutMap(col).map(lin2srgb);
+  return `rgb(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)})`;
+}
+function threeColorOf(col){ const [r,g,b] = gamutMap(col); return new THREE.Color(r,g,b); }
+function deltaE(c1,c2){
+  const lab = c => [c.l, c.c*Math.cos(c.h*Math.PI/180), c.c*Math.sin(c.h*Math.PI/180)];
+  const a = lab(c1), b = lab(c2);
+  return Math.hypot(a[0]-b[0], a[1]-b[1], a[2]-b[2]) * 100;
+}
+// recency-driven shade: chroma collapses toward grey and lightness sinks as sessions age
+function shadeOf(base, rec, active){
+  const r = active ? 1 : rec;
+  const t = Math.pow(r, 1.35);
+  return {
+    l: 0.50 + (base.l - 0.50) * (0.1 + 0.9*t) + (active ? 0.08 : 0),
+    c: base.c * (0.03 + 0.97*t),
+    h: base.h
+  };
+}
+function suggestColors(existing, n){
+  const out = [];
+  let hues = existing.map(c => c.h).concat(AVOID_HUES);   // the avoided band counts as taken
+  if (!existing.length) return [22,152,262,322].slice(0,n).map(h => ({l:.64,c:.21,h}));
+  while (out.length < n){
+    hues.sort((a,b)=>a-b);
+    let best = -1, bi = 0;
+    for (let i=0;i<hues.length;i++){
+      const a = hues[i], b = i+1 < hues.length ? hues[i+1] : hues[0] + 360;
+      if (b - a > best){ best = b - a; bi = i; }
+    }
+    const mid = (hues[bi] + best/2) % 360;
+    out.push({l:.64, c:.21, h: mid});
+    hues.push(mid);
+  }
+  return out;
+}
+
+// ============================================================ hex math
+const HEX_SPACING = 1.08;     // axial size of a session cell
+const HEX_R = 0.92;           // drawn circumradius
+const REGION_SIZE = 10.5;     // axial size of a region cell
+function axialToWorld(q, r, size){ return { x: size*Math.sqrt(3)*(q + r/2), z: size*1.5*r }; }
+function spiral(n){
+  const out = [{q:0,r:0}];
+  const dirs = [[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]];
+  for (let k=1; out.length < n; k++){
+    let q = -k, r = k;
+    for (let d=0; d<6 && out.length<n; d++){
+      for (let i=0; i<k && out.length<n; i++){ out.push({q,r}); q += dirs[d][0]; r += dirs[d][1]; }
+    }
+  }
+  return out;
+}
+function ringCount(n){ let k=0, t=1; while (t < n){ k++; t += 6*k; } return k; }
+
+// ============================================================ mock data
+const REPOS = ['api-server','web-app','ingest-pipeline','contracts','infra','cli-tools'];
+const PALETTE_HUES = [22, 58, 152, 205, 262, 322];   // rose, coral, emerald, teal, blue, violet
+const AVOID_HUES = [88, 104, 120];                   // olive/mustard band: never suggested
+const VERBS = ['Implement','Refactor','Investigate','Fix','Add tests for','Debug','Migrate','Document','Optimize','Wire up'];
+const OBJS  = ['retry logic','consumer lag alert','auth middleware','cursor pagination','rate limiter','schema migration','CI cache step','OOM in worker','flaky e2e test','metrics export','config loader','webhook handler','feature flag cleanup','tracing spans'];
+
+const state = {
+  sessions: [], groups: {}, groupOrder: [],
+  selected: new Set(), focusGroup: null, focusSession: null, hover: null,
+  groupBy: 'group', sort: 'lastActive', lens: 'recency', tab: 'sessions', threshold: 35,
+  filter: { q: '', groups: new Set(), scoreMin: 0, scoreMax: 100, within: 0, kinds: new Set() },
+  decisions: {}, collapsed: {}, tags: {},   // tags: sid -> [custom tag]
+  world: '#f4f6f8'
+};
+
+function makeData(){
+  REPOS.forEach((name, i) => {
+    const gid = 'repo:' + name;
+    state.groups[gid] = { id: gid, name, kind: 'repo', color: { l: .64, c: .21, h: PALETTE_HUES[i % PALETTE_HUES.length] } };
+    state.groupOrder.push(gid);
+  });
+  let idx = 0;
+  REPOS.forEach((name) => {
+    const gid = 'repo:' + name;
+    const n = 12 + Math.floor(rnd()*22);
+    const mine = [];
+    for (let i=0;i<n;i++){
+      const ageDays = Math.pow(rnd(), 2.2) * 110;
+      const lastActiveAt = NOW - ageDays*DAY - rnd()*3600000;
+      const createdAt = lastActiveAt - rnd()*rnd()*20*DAY;
+      const roll = rnd();
+      let title, parentId = null, msgCount, filesEdited;
+      if (roll < 0.14 && mine.length){
+        const p = pick(mine); parentId = p.id; title = 'Fork: ' + p.title.replace(/^Fork: /,'');
+        msgCount = 2 + Math.floor(rnd()*8); filesEdited = rnd() < 0.7 ? 0 : 1 + Math.floor(rnd()*3);
+      } else if (roll < 0.30){
+        title = 'Review PR #' + (1200 + Math.floor(rnd()*900));
+        msgCount = 3 + Math.floor(rnd()*10); filesEdited = rnd() < 0.8 ? 0 : 1;
+      } else if (roll < 0.38){
+        title = pick(['Fix typo in README','Quick check: ' + pick(OBJS), 'Failed attempt: ' + pick(OBJS), 'Explain ' + pick(OBJS)]);
+        msgCount = 2 + Math.floor(rnd()*5); filesEdited = rnd() < 0.6 ? 0 : 1;
+      } else {
+        title = pick(VERBS) + ' ' + pick(OBJS);
+        msgCount = 8 + Math.floor(Math.pow(rnd(),0.6)*120); filesEdited = Math.floor(Math.pow(rnd(),0.8)*18);
+      }
+      const s = {
+        id: 's' + (idx++), title, repo: gid, customGroup: null, createdAt, lastActiveAt,
+        msgCount, toolCalls: Math.floor(msgCount * (0.6 + rnd()*1.4)), filesEdited, parentId,
+        active: false, status: 'ok', h: 0.2
+      };
+      mine.push(s); state.sessions.push(s);
+    }
+  });
+  // three sessions are running right now
+  [3, 41, 77].forEach(i => { const s = state.sessions[i % state.sessions.length]; s.active = true; s.lastActiveAt = NOW - 60000; });
+  state.sessions.forEach(scoreSession);
+}
+
+function recencyOf(s){
+  const days = (NOW - s.lastActiveAt) / DAY;
+  return clamp(1 - days/75, 0, 1);
+}
+function scoreSession(s){
+  const rec = recencyOf(s);
+  const why = [];
+  let sc = 18 + 42*rec;
+  if (s.filesEdited) { sc += Math.min(25, s.filesEdited*3); why.push(s.filesEdited + ' files edited'); }
+  sc += Math.min(10, s.msgCount/10);
+  if (s.parentId && s.filesEdited <= 1){ sc -= 25; why.push('fork with no divergence'); }
+  if (/^Review PR/.test(s.title)){ sc -= 22; why.push('code review of a PR'); }
+  if (/typo|Quick check|Explain/.test(s.title)){ sc -= 15; why.push('one-off question'); }
+  if (/Failed attempt/.test(s.title)){ sc -= 20; why.push('marked as failed attempt'); }
+  if (s.msgCount < 6 && !s.filesEdited){ sc -= 15; why.push('few messages, nothing edited'); }
+  if (rec < 0.15) why.push('idle for ' + Math.round((NOW - s.lastActiveAt)/DAY) + ' days');
+  if (s.active){ sc = 100; why.length = 0; why.push('running now'); }
+  s.score = Math.round(clamp(sc, 0, 100));
+  s.reasons = why;
+}
+
+// ============================================================ persistence (per-viewer convenience only)
+const LS_KEY = 'apiary-proto-v1';
+function save(){
+  try {
+    const custom = state.groupOrder.filter(g => state.groups[g].kind === 'custom').map(g => ({
+      id: g, name: state.groups[g].name, color: state.groups[g].color,
+      members: state.sessions.filter(s => s.customGroup === g).map(s => s.id)
+    }));
+    const colors = {}; state.groupOrder.forEach(g => { if (state.groups[g].kind === 'repo') colors[g] = state.groups[g].color; });
+    localStorage.setItem(LS_KEY, JSON.stringify({ custom, colors, decisions: state.decisions, collapsed: state.collapsed, tags: state.tags, world: state.world,
+      archived: state.sessions.filter(s => s.status === 'archived').map(s => s.id) }));
+  } catch (e) { /* storage unavailable: fine */ }
+}
+function load(){
+  try {
+    const raw = localStorage.getItem(LS_KEY); if (!raw) return;
+    const d = JSON.parse(raw);
+    (d.custom || []).forEach(g => {
+      state.groups[g.id] = { id: g.id, name: g.name, kind: 'custom', color: g.color };
+      state.groupOrder.push(g.id);
+      (g.members || []).forEach(id => { const s = state.sessions.find(x => x.id === id); if (s) s.customGroup = g.id; });
+    });
+    Object.entries(d.colors || {}).forEach(([g,c]) => { if (state.groups[g]) state.groups[g].color = c; });
+    state.decisions = d.decisions || {};
+    state.collapsed = d.collapsed || {};
+    state.tags = d.tags || {};
+    if (d.world) state.world = d.world;
+    (d.archived || []).forEach(id => { const s = state.sessions.find(x => x.id === id); if (s) s.status = 'archived'; });
+  } catch (e) { /* ignore corrupt storage */ }
+}
+
+// ============================================================ layout
+function liveSessions(){ return state.sessions.filter(s => s.status !== 'archived'); }
+function computeLayout(){
+  const coords = spiral(state.groupOrder.length);
+  state.groupOrder.forEach((gid,i) => { const p = axialToWorld(coords[i].q, coords[i].r, REGION_SIZE); state.groups[gid].center = { x: p.x, z: p.z }; });
+  const live = liveSessions();
+  live.forEach(s => { s.displayGroup = (s.customGroup && state.groups[s.customGroup]) ? s.customGroup : s.repo; s.ghostPos = null; });
+  for (const gid of state.groupOrder){
+    const g = state.groups[gid];
+    const own = live.filter(s => s.displayGroup === gid).sort((a,b) => b.lastActiveAt - a.lastActiveAt);
+    const ghosts = g.kind === 'repo' ? live.filter(s => s.repo === gid && s.displayGroup !== gid) : [];
+    const all = own.concat(ghosts);
+    const c = spiral(all.length);
+    all.forEach((s,i) => {
+      const p = axialToWorld(c[i].q, c[i].r, HEX_SPACING);
+      const pos = { x: g.center.x + p.x, z: g.center.z + p.z };
+      if (i < own.length) s.pos = pos; else s.ghostPos = pos;
+    });
+    g.count = own.length;
+    g.maxH = own.reduce((m, s) => Math.max(m, heightFor(s)), 0.4);
+    g.radius = (ringCount(all.length) + 0.8) * HEX_SPACING * Math.sqrt(3);
+  }
+}
+function heightFor(s){
+  if (state.lens === 'score') return 0.35 + 6.2 * (s.score/100);
+  const rec = s.active ? 1 : recencyOf(s);
+  return 0.35 + 6.2 * Math.pow(rec, 1.6);
+}
+function colorForSession(s){
+  const base = state.groups[s.repo].color;
+  if (filterActive() && !matchesFilter(s)) return { l: .88, c: .006, h: base.h };
+  const sh = shadeOf(base, recencyOf(s), s.active);
+  if (state.selected.has(s.id)) { sh.l = Math.min(0.95, sh.l + 0.18); sh.c = Math.max(sh.c, 0.08); }
+  return sh;
+}
+
+// ============================================================ three.js scene
+const world = $('#world');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.NoToneMapping;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.VSMShadowMap;   // variance shadows: smooth, clean penumbra instead of stepped PCF edges
+world.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 500);
+
+// A seamless white studio: sky, fog and floor share one color, so the floor has no visible edge.
+// Sky and floor share one color. Materials are encoded to sRGB on output, but the clear color is written raw,
+// so the floor gets the linear value and the sky the sRGB value; otherwise they differ and a horizon appears.
+const BG = new THREE.Color('#f4f6f8').convertSRGBToLinear();
+const BG_SKY = new THREE.Color('#f4f6f8');
+function environmentTexture(){
+  const c = document.createElement('canvas'); c.width = 512; c.height = 256;
+  const g = c.getContext('2d');
+  const sky = g.createLinearGradient(0, 0, 0, 256);
+  sky.addColorStop(0, '#e6ebf0'); sky.addColorStop(0.5, '#cdd5dd'); sky.addColorStop(0.62, '#aeb8c2'); sky.addColorStop(1, '#8e99a4');
+  g.fillStyle = sky; g.fillRect(0, 0, 512, 256);
+  const lamp = (x, y, rx, ry, col) => { g.save(); g.translate(x, y); g.scale(rx, ry); const rg = g.createRadialGradient(0,0,0,0,0,1); rg.addColorStop(0, col); rg.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = rg; g.beginPath(); g.arc(0,0,1,0,Math.PI*2); g.fill(); g.restore(); };
+  lamp(140, 60, 120, 34, 'rgba(255,255,255,0.85)');
+  lamp(400, 80, 80, 26, 'rgba(255,250,240,0.5)');
+  const t = new THREE.CanvasTexture(c); t.mapping = THREE.EquirectangularReflectionMapping; t.encoding = THREE.sRGBEncoding; return t;
+}
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromEquirectangular(environmentTexture()).texture;
+scene.background = BG_SKY;
+
+const hemi = new THREE.HemisphereLight(0xffffff, 0xc9d2da, 0.32); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff4e6, 1.0); sun.position.set(22, 38, 14); scene.add(sun);
+sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096); sun.shadow.bias = -0.0002; sun.shadow.normalBias = 0.01;
+sun.shadow.radius = 3; sun.shadow.blurSamples = 12;
+function fitShadowCamera(){
+  // the shadow map covers exactly the populated area, so every texel is spent where the hexes are
+  const R = worldRadius() + 4;
+  Object.assign(sun.shadow.camera, { left: -R, right: R, top: R, bottom: -R, near: 1, far: 160 });
+  sun.shadow.camera.updateProjectionMatrix();
+}
+const fill = new THREE.DirectionalLight(0xdfe8ff, 0.35); fill.position.set(-20, 14, -18); scene.add(fill);
+
+function smoothNormals(geo, maxDeg){
+  // average normals only across faces that meet at a shallow angle, so the bevel
+  // reads as a curve while the six side faces keep crisp corners
+  if (geo.index) geo = geo.toNonIndexed();
+  const pos = geo.attributes.position, n = pos.count;
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  const faceN = [];
+  for (let i=0;i<n;i+=3){ a.fromBufferAttribute(pos,i); b.fromBufferAttribute(pos,i+1); c.fromBufferAttribute(pos,i+2); faceN.push(c.sub(b).cross(a.sub(b)).normalize().clone()); }
+  const byPos = new Map();
+  for (let i=0;i<n;i++){ const k = pos.getX(i).toFixed(4)+','+pos.getY(i).toFixed(4)+','+pos.getZ(i).toFixed(4); let l = byPos.get(k); if (!l) byPos.set(k, l = []); l.push(i); }
+  const cos = Math.cos(maxDeg*Math.PI/180), out = new Float32Array(n*3), sum = new THREE.Vector3();
+  for (const list of byPos.values()) for (const i of list){
+    const fi = faceN[(i/3)|0]; sum.set(0,0,0);
+    for (const j of list){ const fj = faceN[(j/3)|0]; if (fi.dot(fj) > cos) sum.add(fj); }
+    sum.normalize(); out[i*3] = sum.x; out[i*3+1] = sum.y; out[i*3+2] = sum.z;
+  }
+  geo.setAttribute('normal', new THREE.BufferAttribute(out, 3));
+  return geo;
+}
+function hexPrism(radius, bevel){
+  const shape = new THREE.Shape();
+  for (let k=0;k<6;k++){ const ang = k*Math.PI/3; const x = radius*Math.sin(ang), y = radius*Math.cos(ang); k ? shape.lineTo(x,y) : shape.moveTo(x,y); }
+  shape.closePath();
+  let geo = new THREE.ExtrudeGeometry(shape, { depth: 1, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 6, curveSegments: 1 });
+  geo.rotateX(-Math.PI/2);            // extrude along +y
+  geo.translate(0, bevel, 0);         // base at y = 0, top at y = 1
+  return smoothNormals(geo, 32);
+}
+// unit-height template; the real height is applied in the vertex shader so the
+// top bevel keeps the same small radius on a tall column as on a short one
+const hexGeo = hexPrism(HEX_R - 0.04, 0.04);
+const HEIGHT_CHUNK = '\n  transformed.y = position.y < 0.5 ? position.y : position.y - 1.0 + max(hexHeight, 0.12);';
+function withHeight(material, mode){
+  material.onBeforeCompile = shader => {
+    shader.vertexShader = (mode === 'attribute' ? 'attribute float aHeight;\n#define hexHeight aHeight\n' : 'uniform float uHeight;\n#define hexHeight uHeight\n')
+      + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>' + HEIGHT_CHUNK);
+    if (mode === 'uniform') shader.uniforms.uHeight = material.userData.uHeight;
+  };
+  material.customProgramCacheKey = () => 'hexheight-' + mode;
+  return material;
+}
+function heightGeometry(n){ const g = hexGeo.clone(); g.setAttribute('aHeight', new THREE.InstancedBufferAttribute(new Float32Array(n), 1)); return g; }
+
+function slab(radius, depth, bevel){
+  const shape = new THREE.Shape();
+  for (let k=0;k<6;k++){ const ang = k*Math.PI/3; const x = radius*Math.sin(ang), y = radius*Math.cos(ang); k ? shape.lineTo(x,y) : shape.moveTo(x,y); }
+  shape.closePath();
+  let geo = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 5, curveSegments: 1 });
+  geo.rotateX(-Math.PI/2); geo.translate(0, -depth - bevel, 0);   // top face at y = 0
+  return smoothNormals(geo, 32);
+}
+const plateGeo = slab(REGION_SIZE*0.94 - 0.14, 0.28, 0.14);
+const hexMat = withHeight(new THREE.MeshPhysicalMaterial({ roughness: 0.5, metalness: 0.0, clearcoat: 0.15, clearcoatRoughness: 0.4, envMapIntensity: 0.22 }), 'attribute');
+const hexDepthMat = withHeight(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), 'attribute');
+const ghostMat = withHeight(new THREE.MeshStandardMaterial({ roughness: 0.8, transparent: true, opacity: 0.28, depthWrite: false }), 'attribute');
+const dimMat = withHeight(new THREE.MeshPhysicalMaterial({ roughness: 0.7, metalness: 0, clearcoat: 0, envMapIntensity: 0.15 }), 'attribute');   // filtered out: solid, colorless, quiet
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), new THREE.MeshBasicMaterial({ color: BG.clone() }));   // unlit: exactly the sky color
+ground.rotation.x = -Math.PI/2; ground.position.y = -0.45; scene.add(ground);
+const shadowFloor = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), new THREE.ShadowMaterial({ opacity: 0.22 }));        // only the shadows, on top of it
+shadowFloor.rotation.x = -Math.PI/2; shadowFloor.position.y = -0.449; shadowFloor.receiveShadow = true; scene.add(shadowFloor);
+const hoverRing = new THREE.Mesh(new THREE.CylinderGeometry(HEX_R*1.22, HEX_R*1.22, 0.06, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color('#243140').convertSRGBToLinear(), transparent: true, opacity: 0.85 }));
+hoverRing.visible = false; scene.add(hoverRing);
+
+function spillTexture(){
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d'); const rg = g.createRadialGradient(128,128,0,128,128,128);
+  rg.addColorStop(0,'rgba(255,255,255,0.9)'); rg.addColorStop(0.35,'rgba(255,255,255,0.35)'); rg.addColorStop(0.7,'rgba(255,255,255,0.08)'); rg.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle = rg; g.fillRect(0,0,256,256);
+  return new THREE.CanvasTexture(c);
+}
+const spillTex = spillTexture();
+const spillGeo = new THREE.PlaneGeometry(1, 1); spillGeo.rotateX(-Math.PI/2);
+// Selective glow: the running columns are rendered alone against black (antialiased), blurred with a
+// small separable Gaussian at half resolution, and that layer is added over the normal frame.
+// No mip pyramid, so the halo is smooth right up to the column and never blotches the surroundings.
+const GLOW = (() => {
+  const pr = renderer.getPixelRatio(), w = Math.max(2, world.clientWidth*pr|0), h = Math.max(2, world.clientHeight*pr|0);
+  const opts = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat, depthBuffer: true, stencilBuffer: false };
+  const full = renderer.capabilities.isWebGL2 ? new THREE.WebGLMultisampleRenderTarget(w, h, opts) : new THREE.WebGLRenderTarget(w, h, opts);
+  const half = { ...opts, depthBuffer: false, type: renderer.capabilities.isWebGL2 ? THREE.HalfFloatType : THREE.UnsignedByteType };
+  const a = new THREE.WebGLRenderTarget(w>>1, h>>1, half), b = new THREE.WebGLRenderTarget(w>>1, h>>1, half);
+  const blur = new THREE.ShaderMaterial({
+    uniforms: { tDiffuse: { value: null }, step: { value: new THREE.Vector2() } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: `uniform sampler2D tDiffuse; uniform vec2 step; varying vec2 vUv;
+      void main(){
+        vec4 c = texture2D(tDiffuse, vUv) * 0.2270270270;
+        c += (texture2D(tDiffuse, vUv + step*1.3846153846) + texture2D(tDiffuse, vUv - step*1.3846153846)) * 0.3162162162;
+        c += (texture2D(tDiffuse, vUv + step*3.2307692308) + texture2D(tDiffuse, vUv - step*3.2307692308)) * 0.0702702703;
+        gl_FragColor = c;
+      }`, depthTest: false, depthWrite: false });
+  // On a light background, added light is invisible. The blurred glow shape becomes the alpha of a
+  // saturated veil in the group hue, which reads as a soft aura on white and on the colored bases alike.
+  const add = new THREE.ShaderMaterial({
+    uniforms: { tDiffuse: { value: null }, strength: { value: 0.55 } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: `uniform sampler2D tDiffuse; uniform float strength; varying vec2 vUv;
+      void main(){
+        vec4 g = texture2D(tDiffuse, vUv);
+        float lum = max(g.r, max(g.g, g.b));
+        vec3 hue = lum > 0.002 ? g.rgb / lum : vec3(0.0);
+        gl_FragColor = vec4(mix(hue, vec3(1.0), 0.45), smoothstep(0.06, 0.7, lum) * strength);
+      }`, transparent: true, depthTest: false, depthWrite: false });
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), blur);
+  const qs = new THREE.Scene(); qs.add(quad);
+  const qc = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  return { full, a, b, blur, add, quad, qs, qc,
+    blackAttr: withHeight(new THREE.MeshBasicMaterial({ color: 0x000000 }), 'attribute'),
+    black: new THREE.MeshBasicMaterial({ color: 0x000000 }),
+    setSize(cw, ch){ const p = renderer.getPixelRatio(), W = Math.max(2, cw*p|0), H = Math.max(2, ch*p|0); full.setSize(W, H); a.setSize(W>>1, H>>1); b.setSize(W>>1, H>>1); },
+    blurPass(src, dst, dx, dy){ blur.uniforms.tDiffuse.value = src.texture; blur.uniforms.step.value.set(dx/src.width, dy/src.height); quad.material = blur; renderer.setRenderTarget(dst); renderer.render(qs, qc); }
+  };
+})();
+function renderWithBloom(){
+  renderer.render(scene, camera);
+  if (!actives.length) return;
+  // pass 2: everything black except the glow bodies
+  const bg = scene.background;
+  scene.background = null;
+  renderer.shadowMap.autoUpdate = false;
+  const hexM = hexMesh && hexMesh.material, ghostM = ghostMesh && ghostMesh.material;
+  if (hexMesh) hexMesh.material = GLOW.blackAttr; if (ghostMesh) ghostMesh.material = GLOW.blackAttr;
+  const dimV = dimMesh && dimMesh.visible; if (dimMesh) dimMesh.visible = false;
+  const plateM = plates.map(p => p.material); for (const p of plates) p.material = GLOW.black;
+  const groundM = ground.material; ground.material = GLOW.black; const sfV = shadowFloor.visible; shadowFloor.visible = false;
+  const ringV = hoverRing.visible; hoverRing.visible = false;
+  for (const a of actives){ a.spill.visible = a.haze.visible = false; a.coreMat = a.core.material; a.core.material = a.glowMat; }
+  renderer.setRenderTarget(GLOW.full); renderer.setClearColor(0x000000, 1); renderer.clear(); renderer.render(scene, camera);
+  // restore the scene
+  if (hexMesh) hexMesh.material = hexM; if (ghostMesh) ghostMesh.material = ghostM; if (dimMesh) dimMesh.visible = dimV;
+  plates.forEach((p,i) => p.material = plateM[i]); ground.material = groundM; shadowFloor.visible = sfV; hoverRing.visible = ringV;
+  for (const a of actives){ a.spill.visible = a.haze.visible = true; a.core.material = a.coreMat; }
+  scene.background = bg;
+  renderer.shadowMap.autoUpdate = true;
+  // pass 3: separable blur at half resolution, three widening iterations
+  GLOW.blurPass(GLOW.full, GLOW.a, 1, 0); GLOW.blurPass(GLOW.a, GLOW.b, 0, 1);
+  GLOW.blurPass(GLOW.b, GLOW.a, 2, 0); GLOW.blurPass(GLOW.a, GLOW.b, 0, 2);
+  GLOW.blurPass(GLOW.b, GLOW.a, 3, 0); GLOW.blurPass(GLOW.a, GLOW.b, 0, 3);
+  // pass 4: add the glow layer over the frame
+  GLOW.add.uniforms.tDiffuse.value = GLOW.b.texture; GLOW.quad.material = GLOW.add;
+  renderer.setRenderTarget(null); renderer.autoClear = false; renderer.render(GLOW.qs, GLOW.qc); renderer.autoClear = true;
+}
+let hexMesh = null, dimMesh = null, ghostMesh = null, hexIndex = [];
+let plates = [], actives = [];       // actives: { s, core, light, spill, haze }
+let heightsAnimating = false;
+const tmpM = new THREE.Matrix4(), tmpP = new THREE.Vector3();
+const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
+
+// Running sessions are drawn as their own self-lit meshes, so their batch instance stays collapsed.
+function setHexMatrix(s){
+  const { mesh, i } = s.slot;
+  if (s.active && mesh === hexMesh){ mesh.setMatrixAt(i, HIDDEN); return; }
+  tmpM.makeTranslation(s.pos.x, 0, s.pos.z); mesh.setMatrixAt(i, tmpM);
+  mesh.geometry.attributes.aHeight.setX(i, s.h);
+}
+function makeBatch(list, material, depthMat, shadows){
+  if (!list.length) return null;
+  const m = new THREE.InstancedMesh(heightGeometry(list.length), material, list.length);
+  if (depthMat) m.customDepthMaterial = depthMat;
+  list.forEach((s,i) => { s.slot = { mesh: m, i }; s.hTarget = heightFor(s); setHexMatrix(s); m.setColorAt(i, threeColorOf(colorForSession(s))); });
+  if (m.instanceColor) m.instanceColor.needsUpdate = true;
+  m.instanceMatrix.needsUpdate = true; m.geometry.attributes.aHeight.needsUpdate = true;
+  m.castShadow = m.receiveShadow = shadows;
+  scene.add(m); return m;
+}
+function markBatchesDirty(){
+  for (const m of [hexMesh, dimMesh]) if (m){ m.instanceMatrix.needsUpdate = true; m.geometry.attributes.aHeight.needsUpdate = true; }
+}
+function disposeScene(){
+  for (const m of [hexMesh, dimMesh]) if (m){ scene.remove(m); m.geometry.dispose(); m.dispose(); }
+  hexMesh = dimMesh = null;
+  if (ghostMesh){ scene.remove(ghostMesh); ghostMesh.geometry.dispose(); ghostMesh.dispose(); ghostMesh = null; }
+  for (const p of plates){ scene.remove(p); p.material.dispose(); }
+  for (const a of actives){ scene.remove(a.core, a.light, a.spill, a.haze); a.core.material.dispose(); a.spill.material.dispose(); a.haze.material.dispose(); a.glowMat.dispose(); }
+  plates = []; actives = [];
+}
+function rebuildScene(){
+  disposeScene();
+  computeLayout();
+  const live = liveSessions();
+  hexIndex = live;
+
+  const filtering = filterActive();
+  const shown = filtering ? live.filter(matchesFilter) : live, dimmed = filtering ? live.filter(s => !matchesFilter(s)) : [];
+  hexMesh = makeBatch(shown, hexMat, hexDepthMat, true);
+  dimMesh = makeBatch(dimmed, dimMat, null, false);   // filtered out: pale solid columns that cast no shadow, so the matches carry the scene
+  heightsAnimating = true;
+
+  const ghosts = live.filter(s => s.ghostPos);
+  if (ghosts.length){
+    ghostMesh = new THREE.InstancedMesh(heightGeometry(ghosts.length), ghostMat, ghosts.length);
+    ghostMesh.geometry.attributes.aHeight.array.fill(0.3);
+    ghosts.forEach((s,i) => {
+      tmpM.makeTranslation(s.ghostPos.x, 0, s.ghostPos.z); ghostMesh.setMatrixAt(i, tmpM);
+      ghostMesh.setColorAt(i, threeColorOf(state.groups[s.repo].color));
+    });
+    if (ghostMesh.instanceColor) ghostMesh.instanceColor.needsUpdate = true;
+    scene.add(ghostMesh);
+  }
+
+  for (const gid of state.groupOrder){
+    const g = state.groups[gid], repo = g.kind === 'repo';
+    const plate = new THREE.Mesh(plateGeo, new THREE.MeshPhysicalMaterial({
+      color: threeColorOf(repo ? { l: .78, c: g.color.c * .7, h: g.color.h } : { l: .82, c: .015, h: g.color.h }),
+      roughness: .65, metalness: 0, clearcoat: .1, clearcoatRoughness: .5, envMapIntensity: .12 }));
+    plate.position.set(g.center.x, -0.02, g.center.z); plate.userData.gid = gid; plate.receiveShadow = true; plate.castShadow = true;
+    scene.add(plate); plates.push(plate);
+  }
+
+  for (const s of shown.filter(s => s.active)){
+    const base = state.groups[s.repo].color;
+    // same material as every other column, plus a uniform emissive term in the group's hue:
+    // lit and shaded like its neighbours, but glowing evenly from within
+    const hCore = { value: s.h };
+    const coreMat = new THREE.MeshPhysicalMaterial({
+      color: threeColorOf({ ...base, l: .7, c: base.c }),
+      emissive: threeColorOf({ ...base, l: .72, c: Math.max(base.c, .2) }), emissiveIntensity: 0.45,
+      roughness: .5, metalness: 0, clearcoat: .15, clearcoatRoughness: .4, envMapIntensity: .22 });
+    coreMat.userData.uHeight = hCore; withHeight(coreMat, 'uniform');
+    // what the bloom pass sees: an unlit body in the group hue, so the halo is even all round
+    const glowLo = threeColorOf({ ...base, l: .5, c: Math.max(base.c, .22) }), glowHi = threeColorOf({ ...base, l: .68, c: Math.max(base.c, .22) });
+    const glowMat = new THREE.MeshBasicMaterial({ color: glowLo.clone() }); glowMat.userData.uHeight = hCore; withHeight(glowMat, 'uniform');
+    const coreDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }); coreDepth.userData.uHeight = hCore; withHeight(coreDepth, 'uniform');
+    const core = new THREE.Mesh(hexGeo, coreMat);
+    core.position.set(s.pos.x, 0, s.pos.z); core.castShadow = core.receiveShadow = true; core.customDepthMaterial = coreDepth; core.userData.session = s;
+    const light = new THREE.PointLight(threeColorOf({ ...base, l: .75 }), 0.5, 9, 2); light.position.set(s.pos.x, s.h + 1, s.pos.z);
+    // a little light spilling onto the base around the foot of the column, and a whisper of haze on the surface
+    const spill = new THREE.Mesh(spillGeo, new THREE.MeshBasicMaterial({ map: spillTex, color: threeColorOf({ ...base, l: .7, c: Math.max(base.c, .2) }), transparent: true, opacity: .22, depthWrite: false }));
+    spill.position.set(s.pos.x, 0.012, s.pos.z); spill.scale.set(5.2, 1, 5.2); spill.renderOrder = 1;
+    const hHaze = { value: s.h + 0.5 };
+    const hazeMat = new THREE.MeshBasicMaterial({ color: threeColorOf({ ...base, l: .78, c: Math.max(base.c, .2) }), transparent: true, opacity: .16, depthWrite: false }); hazeMat.userData.uHeight = hHaze; withHeight(hazeMat, 'uniform');
+    const haze = new THREE.Mesh(hexGeo, hazeMat); haze.position.set(s.pos.x, 0, s.pos.z); haze.scale.set(1.22, 1, 1.22); haze.renderOrder = 2;
+    scene.add(core, light, spill, haze);
+    actives.push({ s, core, light, spill, haze, hCore, hHaze, glowMat, glowLo, glowHi });
+  }
+  fitShadowCamera();
+  buildGroupLabels();
+  renderMinimap();
+  applyHivePalette();
+}
+function applyHivePalette(){
+  // the UI's only color is the apiary's own: a gradient of the repo colors, and three of them on the mark
+  const cols = state.groupOrder.filter(g => state.groups[g].kind === 'repo').map(g => cssOf(state.groups[g].color));
+  const tray = $('#tray');
+  ['--c0','--c1','--c2'].forEach((v,i) => { if (cols[i]) tray.style.setProperty(v, cols[Math.round(i*(cols.length-1)/2)]); });
+}
+function refreshColors(){
+  for (const s of hexIndex) if (s.slot) s.slot.mesh.setColorAt(s.slot.i, threeColorOf(colorForSession(s)));
+  for (const m of [hexMesh, dimMesh]) if (m && m.instanceColor) m.instanceColor.needsUpdate = true;
+}
+function refreshHeights(){ for (const s of hexIndex) s.hTarget = heightFor(s); heightsAnimating = true; }
+
+// ============================================================ camera controls (orbit with animated goals)
+const orbit = {
+  goal: { target: new THREE.Vector3(0,0,0), theta: 0.55, phi: 0.98, radius: 78 },
+  cur:  { target: new THREE.Vector3(0,0,0), theta: 0.55, phi: 0.98, radius: 78 },
+  drag: null,
+  update(dt){
+    const k = 1 - Math.exp(-dt * 7);
+    this.cur.target.lerp(this.goal.target, k);
+    this.cur.theta = lerp(this.cur.theta, this.goal.theta, k);
+    this.cur.phi = lerp(this.cur.phi, this.goal.phi, k);
+    this.cur.radius = lerp(this.cur.radius, this.goal.radius, k);
+    const r = this.cur.radius, p = this.cur.phi, t = this.cur.theta;
+    camera.position.set(
+      this.cur.target.x + r*Math.sin(p)*Math.sin(t),
+      this.cur.target.y + r*Math.cos(p),
+      this.cur.target.z + r*Math.sin(p)*Math.cos(t));
+    camera.lookAt(this.cur.target);
+  },
+  rotate(dx, dy){
+    this.goal.theta -= dx * 0.006;
+    this.goal.phi = clamp(this.goal.phi - dy * 0.006, 0.02, 1.52);
+  },
+  pan(dx, dy){
+    const s = this.goal.radius * 0.0016;
+    const right = new THREE.Vector3(Math.cos(this.goal.theta), 0, -Math.sin(this.goal.theta));
+    const fwd = new THREE.Vector3(-Math.sin(this.goal.theta), 0, -Math.cos(this.goal.theta));
+    this.goal.target.addScaledVector(right, -dx*s).addScaledVector(fwd, dy*s);   // drag down: the world follows the cursor down
+  },
+  zoom(f){ this.goal.radius = clamp(this.goal.radius * f, 5, 220); }
+};
+
+const canvas = renderer.domElement;
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('pointerdown', e => {
+  canvas.setPointerCapture(e.pointerId);
+  orbit.drag = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, btn: e.button, shift: e.shiftKey, moved: false };
+});
+canvas.addEventListener('pointermove', e => {
+  if (orbit.drag){
+    const dx = e.clientX - orbit.drag.x, dy = e.clientY - orbit.drag.y;
+    orbit.drag.x = e.clientX; orbit.drag.y = e.clientY;
+    if (Math.hypot(e.clientX - orbit.drag.sx, e.clientY - orbit.drag.sy) > 4) orbit.drag.moved = true;
+    if (orbit.drag.btn === 2 || orbit.drag.btn === 1 || orbit.drag.shift) orbit.pan(dx, dy); else orbit.rotate(dx, dy);
+    return;
+  }
+  setHover(pickAt(e));
+});
+canvas.addEventListener('pointerup', e => {
+  const d = orbit.drag; orbit.drag = null;
+  if (!d || d.moved || d.btn !== 0) return;
+  const s = pickAt(e);
+  if (s) { selectSession(s, e.shiftKey); if (!e.shiftKey) focusSession(s); }
+  else if (!e.shiftKey) { const g = pickPlate(e); if (g) focusGroup(g); }
+});
+canvas.addEventListener('pointerleave', () => setHover(null));
+canvas.addEventListener('wheel', e => { e.preventDefault(); orbit.zoom(Math.exp(clamp(e.deltaY, -120, 120) * 0.0012)); }, { passive: false });
+canvas.addEventListener('dblclick', e => { if (!pickAt(e)) resetView(); });
+
+const raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2();
+function setRay(e){
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+}
+function rayHitColumn(o, d, cx, cz, r, h){
+  const ox = o.x - cx, oz = o.z - cz;
+  const a = d.x*d.x + d.z*d.z, b = 2*(ox*d.x + oz*d.z), c = ox*ox + oz*oz - r*r;
+  let best = Infinity;
+  const disc = b*b - 4*a*c;
+  if (a > 1e-9 && disc >= 0){
+    const sq = Math.sqrt(disc);
+    for (const t of [(-b - sq)/(2*a), (-b + sq)/(2*a)]){
+      if (t <= 0) continue;
+      const y = o.y + d.y*t;
+      if (y >= 0 && y <= h && t < best) best = t;
+    }
+  }
+  if (Math.abs(d.y) > 1e-9){
+    const t = (h - o.y)/d.y;
+    if (t > 0 && t < best){ const x = o.x + d.x*t - cx, z = o.z + d.z*t - cz; if (x*x + z*z <= r*r) best = t; }
+  }
+  return best;
+}
+function pickAt(e){
+  setRay(e);
+  const o = raycaster.ray.origin, d = raycaster.ray.direction;
+  let best = null, bt = Infinity;
+  for (const s of hexIndex){
+    const t = rayHitColumn(o, d, s.pos.x, s.pos.z, HEX_R, s.h);
+    if (t < bt){ bt = t; best = s; }
+  }
+  return best;
+}
+function pickPlate(e){
+  setRay(e);
+  const hits = raycaster.intersectObjects(plates);
+  return hits.length ? hits[0].object.userData.gid : null;
+}
+function setHover(s){
+  if (state.hover === s) return;
+  state.hover = s;
+  canvas.style.cursor = s ? 'pointer' : '';
+  hoverRing.visible = !!s;
+  if (s) hoverRing.position.set(s.pos.x, 0.03, s.pos.z);
+}
+const ANGLE_45 = Math.PI/4;   // polar angle: 0 is straight down, PI/2 is level with the floor
+function fitDistance(radius){
+  // distance at which a sphere of this radius fills the narrower field of view
+  const fovV = camera.fov*Math.PI/180, fovH = 2*Math.atan(Math.tan(fovV/2)*camera.aspect);
+  return radius / Math.sin(Math.min(fovV, fovH)/2) * 1.04;
+}
+function worldRadius(){
+  let r = REGION_SIZE;
+  for (const gid of state.groupOrder){ const g = state.groups[gid]; r = Math.max(r, Math.hypot(g.center.x, g.center.z) + REGION_SIZE*0.94); }
+  return r;
+}
+function focusGroup(gid, sid){
+  const g = state.groups[gid]; if (!g) return;
+  state.focusGroup = gid; state.focusSession = sid || null;
+  orbit.goal.target.set(g.center.x, 0.6, g.center.z);
+  orbit.goal.radius = clamp(fitDistance(g.radius + 1.5), 15, 60);
+  orbit.goal.phi = ANGLE_45;
+  renderTray(); renderMinimap();
+}
+function nearestTurn(target, current){
+  // same angle, expressed so the ease takes the short way round
+  let d = (target - current) % (2*Math.PI);
+  if (d > Math.PI) d -= 2*Math.PI; if (d < -Math.PI) d += 2*Math.PI;
+  return current + d;
+}
+function focusSession(s){
+  state.focusGroup = s.displayGroup; state.focusSession = s.id;
+  // look at the top of the column, from outside its region, along the line that runs
+  // from the region's center through the column: the column faces the camera, its group behind it
+  const g = state.groups[s.displayGroup];
+  const vx = s.pos.x - g.center.x, vz = s.pos.z - g.center.z;
+  if (Math.hypot(vx, vz) > 0.5) orbit.goal.theta = nearestTurn(Math.atan2(vx, vz), orbit.cur.theta);
+  orbit.goal.target.set(s.pos.x, s.h * 0.8, s.pos.z);
+  orbit.goal.radius = clamp(13 + s.h, 15, 22);
+  orbit.goal.phi = ANGLE_45;
+  renderTray(); renderMinimap();
+}
+function viewOverview(){
+  state.focusGroup = null; state.focusSession = null;
+  orbit.goal.target.set(0, 0, 0); orbit.goal.radius = clamp(fitDistance(worldRadius()), 30, 220); orbit.goal.phi = ANGLE_45;
+  renderTray(); renderMinimap();
+}
+function viewTop(){
+  state.focusGroup = null; state.focusSession = null;
+  orbit.goal.target.set(0, 0, 0); orbit.goal.radius = clamp(fitDistance(worldRadius()), 30, 220); orbit.goal.phi = 0.02; orbit.goal.theta = 0;
+  renderTray(); renderMinimap();
+}
+const resetView = viewOverview;
+$('#camctl').addEventListener('click', e => { const b = e.target.closest('button'); if (!b || !b.dataset.view) return; b.dataset.view === 'top' ? viewTop() : viewOverview(); });
+const WORLD_PRESETS = { bright: '#f4f6f8', dark: '#182230' };
+const LIGHT_TOKENS = { '--panel': '#ffffff', '--panel-2': '#eef1f4', '--border': '#d5dce3', '--text': '#1c2730', '--muted': '#5c6b78', '--accent': '#2b4e78', '--accent-ink': '#fff', '--shadow': '0 8px 30px rgba(20,30,40,.14)' };
+const DARK_TOKENS  = { '--panel': '#1f2b3a', '--panel-2': '#273546', '--border': '#344657', '--text': '#e8eef3', '--muted': '#93a4b5', '--accent': '#7fb0e8', '--accent-ink': '#0f1a26', '--shadow': '0 10px 36px rgba(0,0,0,.45)' };
+function setWorldColor(hex){
+  state.world = hex;
+  const c = new THREE.Color(hex); const lum = 0.2126*c.r + 0.7152*c.g + 0.0722*c.b;   // sRGB-ish, good enough to pick a text palette
+  BG_SKY.copy(c); BG.copy(c).convertSRGBToLinear();
+  ground.material.color.copy(BG);
+  shadowFloor.material.opacity = lum > 0.5 ? 0.22 : 0.5;
+  const w = $('#world'); w.style.setProperty('--bg', hex);
+  for (const [k,v] of Object.entries(lum > 0.5 ? LIGHT_TOKENS : DARK_TOKENS)) w.style.setProperty(k, v);
+  hoverRing.material.color.set(lum > 0.5 ? '#243140' : '#e8eef3').convertSRGBToLinear();
+}
+$('#worldcolor').addEventListener('click', () => {
+  const dlg = openModal(`<h3>World color</h3>
+    <div class="field"><span>The floor and sky share one color.</span><div class="wopts">
+      <button class="btn" data-w="bright">Bright</button><button class="btn" data-w="dark">Dark</button>
+      <label class="btn" style="display:flex;align-items:center;gap:8px;cursor:pointer">Custom <input type="color" id="wcustom" value="${state.world}"></label>
+    </div></div>
+    <div class="actions"><button class="btn primary" data-close>Done</button></div>`);
+  dlg.querySelector('.wopts').addEventListener('click', e => { const b = e.target.closest('[data-w]'); if (!b) return; setWorldColor(WORLD_PRESETS[b.dataset.w]); dlg.querySelector('#wcustom').value = state.world; save(); });
+  dlg.querySelector('#wcustom').addEventListener('input', e => { setWorldColor(e.target.value); save(); });
+});
+function selectSession(s, additive){
+  if (additive){ if (state.selected.has(s.id)) state.selected.delete(s.id); else state.selected.add(s.id); }
+  else state.selected = new Set([s.id]);
+  refreshColors(); renderTray();
+}
+function clearSelection(){ state.selected.clear(); refreshColors(); renderTray(); }
+
+// ============================================================ labels (HTML overlay)
+const labelsEl = $('#labels');
+const groupLabels = new Map();   // gid -> element
+const sessLabels = new Map();    // sid -> element
+function buildGroupLabels(){
+  for (const el of groupLabels.values()) el.remove();
+  groupLabels.clear();
+  for (const gid of state.groupOrder){
+    const g = state.groups[gid];
+    const el = document.createElement('div'); el.className = 'lbl group';
+    el.innerHTML = esc(g.name) + '<small>' + g.count + (g.kind === 'custom' ? ' cells on loan' : ' cells') + '</small>';
+    labelsEl.appendChild(el); groupLabels.set(gid, el);
+  }
+}
+function sessLabel(s){
+  let el = sessLabels.get(s.id);
+  if (!el){ el = document.createElement('div'); el.className = 'lbl sess'; el.textContent = s.title; labelsEl.appendChild(el); sessLabels.set(s.id, el); }
+  el.dataset.used = '1';
+  return el;
+}
+function placeLabel(el, x, y, z){
+  tmpP.set(x, y, z).project(camera);
+  const off = tmpP.z > 1 || Math.abs(tmpP.x) > 1.2 || Math.abs(tmpP.y) > 1.2;
+  el.classList.toggle('hidden', off);
+  if (off) return;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  el.style.transform = `translate(-50%,-100%) translate(${((tmpP.x+1)/2*w).toFixed(1)}px, ${((1-tmpP.y)/2*h).toFixed(1)}px)`;
+}
+const placedBoxes = [];
+function overlapsPlaced(el){
+  const r = el.getBoundingClientRect();
+  for (const b of placedBoxes) if (r.left < b.right + 4 && r.right > b.left - 4 && r.top < b.bottom + 2 && r.bottom > b.top - 2) return true;
+  placedBoxes.push(r); return false;
+}
+function updateLabels(){
+  const near = orbit.cur.radius < 45;
+  placedBoxes.length = 0;
+  for (const el of sessLabels.values()) el.dataset.used = '';
+  const byId = id => state.sessions.find(x => x.id === id);
+  const isHot = s => s === state.hover || state.selected.has(s.id) || s.id === state.focusSession;
+  const place = (s, allowDrop) => {
+    if (!s || s.status === 'archived' || !s.slot) return;
+    const el = sessLabel(s);
+    el.classList.toggle('hot', isHot(s));
+    placeLabel(el, s.pos.x, s.h + 0.7, s.pos.z);
+    if (!el.classList.contains('hidden') && overlapsPlaced(el) && allowDrop) el.classList.add('hidden');
+  };
+  // 1. what the person is pointing at or has chosen: always shown
+  const primary = new Map();
+  for (const s of [state.hover, byId(state.focusSession), ...[...state.selected].map(byId)]) if (s) primary.set(s.id, s);
+  for (const s of primary.values()) place(s, false);
+  // 2. group names, above each group's tallest column, unless that spot is taken
+  for (const [gid, el] of groupLabels){
+    const g = state.groups[gid];
+    placeLabel(el, g.center.x, (g.maxH || 0) + 1.8, g.center.z);
+    if (!el.classList.contains('hidden') && overlapsPlaced(el)) el.classList.add('hidden');
+  }
+  // 3. running sessions, then up close the tallest of the focused group: shown when there is room
+  const secondary = [];
+  for (const a of actives) if (!primary.has(a.s.id)) secondary.push(a.s);
+  if (near && state.focusGroup) for (const s of hexIndex.filter(s => s.displayGroup === state.focusGroup).sort((a,b) => b.h - a.h).slice(0, 6)) if (!primary.has(s.id)) secondary.push(s);
+  for (const s of new Set(secondary)) place(s, true);
+  for (const [sid, el] of sessLabels) if (!el.dataset.used){ el.remove(); sessLabels.delete(sid); }
+}
+
+// ============================================================ minimap
+function renderMinimap(){
+  const gs = state.groupOrder.map(g => state.groups[g]);
+  if (!gs.length) return;
+  let minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
+  gs.forEach(g => { minX=Math.min(minX,g.center.x); maxX=Math.max(maxX,g.center.x); minZ=Math.min(minZ,g.center.z); maxZ=Math.max(maxZ,g.center.z); });
+  const pad = REGION_SIZE*1.1, W = 180, H = 140;
+  const sx = W / (maxX - minX + 2*pad), sz = H / (maxZ - minZ + 2*pad), sc = Math.min(sx, sz);
+  const ox = (W - (maxX-minX)*sc)/2 - minX*sc, oz = (H - (maxZ-minZ)*sc)/2 - minZ*sc;
+  const hexPts = (cx, cy, r) => Array.from({length:6}, (_,k) => { const t = k*Math.PI/3; return (cx + r*Math.sin(t)).toFixed(1) + ',' + (cy + r*Math.cos(t)).toFixed(1); }).join(' ');
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Map of session groups">`;
+  gs.forEach(g => {
+    const cx = g.center.x*sc + ox, cy = g.center.z*sc + oz, r = REGION_SIZE*0.92*sc;
+    const fill = g.kind === 'repo' ? cssOf(g.color) : cssOf({ l: .72, c: .02, h: 0 });
+    svg += `<polygon points="${hexPts(cx,cy,r)}" fill="${fill}" class="${state.focusGroup===g.id?'focus':''}" data-gid="${esc(g.id)}"><title>${esc(g.name)}</title></polygon>`;
+    svg += `<text x="${cx.toFixed(1)}" y="${(cy+2.5).toFixed(1)}">${esc(g.name.length > 12 ? g.name.slice(0,11)+'…' : g.name)}</text>`;
+  });
+  const tx = orbit.goal.target.x*sc + ox, tz = orbit.goal.target.z*sc + oz;
+  svg += `<circle class="cam" cx="${tx.toFixed(1)}" cy="${tz.toFixed(1)}" r="3.5"/></svg>`;
+  $('#minimap').innerHTML = svg;
+}
+$('#minimap').addEventListener('click', e => { const p = e.target.closest('polygon'); if (p) focusGroup(p.dataset.gid); });
+
+// ============================================================ tray
+const listEl = $('#list');
+const ORDERS = {
+  lastActive: (a,b) => b.lastActiveAt - a.lastActiveAt,
+  created: (a,b) => b.createdAt - a.createdAt,
+  score: (a,b) => b.score - a.score,
+  name: (a,b) => a.title.localeCompare(b.title)
+};
+const DATE_BUCKETS = ['Today','Yesterday','Past week','Past two weeks','Past month','Past two months','Older'];
+function dateBucket(ms){
+  const d = (NOW - ms)/DAY;
+  return d < 1 ? 0 : d < 2 ? 1 : d < 7 ? 2 : d < 14 ? 3 : d < 30 ? 4 : d < 60 ? 5 : 6;
+}
+// each grouper: how to key a session, how to title a key, and the natural order of its sections
+const GROUPERS = {
+  date:  { key: s => dateBucket(s.lastActiveAt), title: k => DATE_BUCKETS[k], order: (a,b) => a - b },
+  score: { key: s => Math.min(9, Math.floor(s.score/10)), title: k => k === 9 ? '90–100' : `${k*10}–${k*10+9}`, order: (a,b) => b - a },
+  group: { key: s => s.displayGroup, title: k => state.groups[k].name, order: (a,b) => state.groups[a].name.localeCompare(state.groups[b].name) }
+};
+function filterActive(){
+  const f = state.filter;
+  return !!(f.q || f.groups.size || f.scoreMin > 0 || f.scoreMax < 100 || f.within || f.kinds.size);
+}
+function matchesFilter(s){
+  const f = state.filter;
+  if (f.q){ const q = f.q.toLowerCase(); if (!s.title.toLowerCase().includes(q) && !state.groups[s.repo].name.toLowerCase().includes(q)) return false; }
+  if (f.groups.size && !f.groups.has(s.repo) && !f.groups.has(s.displayGroup)) return false;
+  if (s.score < f.scoreMin || s.score > f.scoreMax) return false;
+  if (f.within && (NOW - s.lastActiveAt) > f.within*DAY) return false;
+  if (f.kinds.size && !tagsOf(s).some(t => f.kinds.has(t))) return false;
+  return true;
+}
+// labels: a few derived from the session itself, plus whatever the user attaches
+const AUTO_TAGS = { running: s => s.active, fork: s => !!s.parentId, review: s => /^Review PR/.test(s.title), edits: s => s.filesEdited > 0 };
+function autoTagsOf(s){ return Object.keys(AUTO_TAGS).filter(k => AUTO_TAGS[k](s)); }
+function customTagsOf(s){ return state.tags[s.id] || []; }
+function tagsOf(s){ return autoTagsOf(s).concat(customTagsOf(s)); }
+function allCustomTags(){ const set = new Set(); for (const l of Object.values(state.tags)) for (const t of l) set.add(t); return [...set].sort(); }
+function setTag(s, tag, on){
+  const l = new Set(state.tags[s.id] || []); on ? l.add(tag) : l.delete(tag);
+  if (l.size) state.tags[s.id] = [...l]; else delete state.tags[s.id];
+}
+function shownSessions(){ return liveSessions().filter(matchesFilter); }
+let lastSections = [];
+function buildSections(){
+  const live = shownSessions(), cmp = ORDERS[state.sort];
+  if (state.groupBy === 'none') return lastSections = [{ id: 'all', rows: live.slice().sort(cmp), ghosts: [] }];
+  const gr = GROUPERS[state.groupBy];
+  const byKey = new Map();
+  for (const s of live){ const k = gr.key(s); let l = byKey.get(k); if (!l) byKey.set(k, l = []); l.push(s); }
+  if (state.groupBy === 'group') for (const gid of state.groupOrder) if (!byKey.has(gid)) byKey.set(gid, []);   // empty custom groups still show
+  return lastSections = [...byKey.keys()].sort(gr.order).map(k => ({
+    id: state.groupBy + ':' + k, key: k, title: gr.title(k),
+    rows: byKey.get(k).sort(cmp),
+    ghosts: state.groupBy === 'group' && state.groups[k].kind === 'repo' ? live.filter(s => s.repo === k && s.displayGroup !== k).sort(cmp) : []
+  }));
+}
+function rowHtml(s, ghost){
+  const g = state.groups[s.repo];
+  const rec = recencyOf(s);
+  const css = cssOf(shadeOf(g.color, rec, s.active));
+  const bits = [g.name, ageText(s.lastActiveAt), s.msgCount + ' msgs'];
+  if (s.parentId) bits.push('fork');
+  if (ghost && state.groups[s.displayGroup]) bits.push('in ' + state.groups[s.displayGroup].name);
+  return `<div class="row ${state.selected.has(s.id)?'sel':''} ${ghost?'ghost':''}" data-id="${s.id}" style="--rowc:${cssOf(g.color)}">
+    <span class="bar" style="background:${css}"></span>
+    <span class="body" style="opacity:${(0.5 + 0.5*(s.active?1:rec)).toFixed(2)}"><span class="title">${esc(s.title)}</span><span class="meta">${esc(bits.join(', '))}</span>${customTagsOf(s).length ? '<span class="tags">' + customTagsOf(s).map(t => `<span>${esc(t)}</span>`).join('') + '</span>' : ''}</span>
+    <span class="right">${s.active ? `<span class="pulse" style="--pc:${css}"></span>` : ''}<span class="score ${s.score >= 70 ? 'hi' : s.score < 40 ? 'lo' : ''}" title="keep score">${s.score}</span></span>
+  </div>`;
+}
+function secSelState(sec){
+  const rows = sec.rows.concat(sec.ghosts || []);
+  const n = rows.filter(r => state.selected.has(r.id)).length;
+  return !rows.length || !n ? 'none' : n === rows.length ? 'all' : 'some';
+}
+function secSelButton(sec){
+  const st = secSelState(sec);
+  const icon = st === 'all' ? '<svg viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2" fill="currentColor" stroke="none"/><path d="M5 8l2 2 4-4" stroke="var(--panel)" stroke-width="1.6"/></svg>'
+    : st === 'some' ? '<svg viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/><path d="M5 8h6" stroke-width="1.8"/></svg>'
+    : '<svg viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/></svg>';
+  return `<button class="secsel ${st}" data-act="selectsec" title="${st === 'all' ? 'Deselect this section' : 'Select everything in this section'}">${icon}</button>`;
+}
+function sectionHeadHtml(sec){
+  return `<div class="ghead ${state.collapsed[sec.id]?'closed':''}" data-sec="${esc(sec.id)}">
+    <button class="caret" data-act="toggle" aria-label="collapse">▾</button>
+    <span class="gname">${esc(sec.title)}</span>
+    <span class="count">${sec.rows.length}</span>
+    ${secSelButton(sec)}
+  </div>`;
+}
+function groupHeadHtml(g, n, secId, sec){
+  const closed = state.collapsed[secId];
+  return `<div class="ghead ${closed?'closed':''}" data-gid="${esc(g.id)}" data-sec="${esc(secId)}" style="--gc:${cssOf(g.color)}">
+    <button class="caret" data-act="toggle" aria-label="collapse">▾</button>
+    <button class="swatch" data-act="color" style="background:${cssOf(g.color)}" title="Change color"></button>
+    <button class="gname" data-act="focus" title="Focus in world">${esc(g.name)}</button>
+    ${g.kind==='custom' ? '<span class="kind">swarm</span>' : ''}
+    <span class="count">${n}</span>
+    ${secSelButton(sec)}
+    ${g.kind==='custom' ? '<button class="edit" data-act="edit" title="Edit group"><svg viewBox="0 0 16 16"><path d="M11.5 2.5l2 2L5 13H3v-2zM10 4l2 2"/></svg></button>' : ''}
+  </div>`;
+}
+function renderTray(){
+  $('#ctl-sessions').style.display = state.tab === 'sessions' ? '' : 'none';
+  renderFilterChips();
+  if (state.tab === 'gc') return renderGc();
+  let html = '';
+  for (const sec of buildSections()){
+    if (sec.id !== 'all'){
+      html += state.groupBy === 'group'
+        ? groupHeadHtml(state.groups[sec.key], sec.rows.length + (sec.ghosts.length ? ' +' + sec.ghosts.length : ''), sec.id, sec)
+        : sectionHeadHtml(sec);
+      if (state.collapsed[sec.id]) continue;
+    }
+    html += sec.rows.map(s => rowHtml(s, false)).join('') + sec.ghosts.map(s => rowHtml(s, true)).join('');
+    if (!sec.rows.length && !sec.ghosts.length) html += `<div class="empty">${sec.id === 'all' ? 'No sessions.' : 'Empty swarm. Select cells and add them here.'}</div>`;
+  }
+  const archived = state.sessions.filter(s => s.status === 'archived');
+  if (archived.length){
+    html += `<div class="ghead ${state.collapsed.archive?'closed':''}" data-sec="archive"><button class="caret" data-act="toggle">▾</button><span class="swatch" style="background:var(--border)"></span><span class="gname">Archive</span><span class="count">${archived.length}</span></div>`;
+    if (!state.collapsed.archive) html += archived.map(s => `<div class="row ghost" data-id="${s.id}" data-archived="1"><span class="bar" style="background:var(--border)"></span><span class="body"><span class="title">${esc(s.title)}</span><span class="meta">${esc(state.groups[s.repo].name)}, summary saved, transcript archived</span></span><span class="right"><button class="btn quiet" data-act="restore" style="padding:2px 6px;font-size:12px">Restore</button></span></div>`).join('');
+  }
+  listEl.innerHTML = html;
+  if (state.focusSession){ const el = listEl.querySelector(`.row[data-id="${state.focusSession}"]`); if (el) el.scrollIntoView({ block: 'nearest' }); }
+  // selection bar
+  const n = state.selected.size;
+  $('#selbar').classList.toggle('on', n > 0);
+  $('#seln').textContent = n + ' selected';
+  const addto = $('#addto');
+  addto.innerHTML = '<option value="">Add to group…</option>' + state.groupOrder.filter(g => state.groups[g].kind==='custom').map(g => `<option value="${esc(g)}">${esc(state.groups[g].name)}</option>`).join('') + '<option value="__home">Return to home hive</option>';
+}
+listEl.addEventListener('click', e => {
+  const act = e.target.closest('[data-act]');
+  const head = e.target.closest('.ghead');
+  if (act && head){
+    const gid = head.dataset.gid, sec = head.dataset.sec;
+    if (act.dataset.act === 'toggle'){ state.collapsed[sec] = !state.collapsed[sec]; save(); renderTray(); }
+    else if (act.dataset.act === 'selectsec'){
+      const section = lastSections.find(x => x.id === sec); if (!section) return;
+      const rows = section.rows.concat(section.ghosts);
+      const all = rows.length && rows.every(r => state.selected.has(r.id));
+      for (const r of rows) all ? state.selected.delete(r.id) : state.selected.add(r.id);
+      refreshColors(); renderTray();
+    }
+    else if (act.dataset.act === 'focus') focusGroup(gid);
+    else if (act.dataset.act === 'color') openGroupColor(gid);
+    else if (act.dataset.act === 'edit') openGroupEditor(gid);
+    return;
+  }
+  const row = e.target.closest('.row');
+  if (!row) return;
+  const s = state.sessions.find(x => x.id === row.dataset.id);
+  if (!s) return;
+  if (act && act.dataset.act === 'restore'){ s.status = 'ok'; delete state.decisions[s.id]; save(); rebuildScene(); renderTray(); toast('Restored to ' + state.groups[s.repo].name); return; }
+  if (row.dataset.archived) return;
+  selectSession(s, e.shiftKey);
+  if (!e.shiftKey) focusSession(s);
+});
+listEl.addEventListener('mouseover', e => { const row = e.target.closest('.row'); if (!row || row.dataset.archived) return; const s = state.sessions.find(x => x.id === row.dataset.id); if (s && s.status !== 'archived') setHover(s); });
+listEl.addEventListener('mouseleave', () => setHover(null));
+
+$('#sort').addEventListener('change', e => { state.sort = e.target.value; renderTray(); });
+$('#groupby').addEventListener('change', e => { state.groupBy = e.target.value; renderTray(); });
+function renderFilterChips(){
+  $('#fgroups').innerHTML = state.groupOrder.map(gid => { const g = state.groups[gid]; return `<button data-gid="${esc(gid)}" class="${state.filter.groups.has(gid)?'on':''}"><span class="dot" style="background:${cssOf(g.color)}"></span>${esc(g.name)}</button>`; }).join('');
+  const autoNames = { running: 'Running', fork: 'Fork', review: 'Review', edits: 'Edited files' };
+  $('#fkinds').innerHTML = Object.keys(AUTO_TAGS).map(k => `<button class="auto ${state.filter.kinds.has(k)?'on':''}" data-kind="${k}" title="Derived label">${autoNames[k]}</button>`).join('')
+    + allCustomTags().map(t => `<button class="${state.filter.kinds.has(t)?'on':''}" data-kind="${esc(t)}">${esc(t)}</button>`).join('');
+  $('#fscore-lbl').textContent = state.filter.scoreMin + ' to ' + state.filter.scoreMax;
+  const f = state.filter, n = (f.groups.size ? 1 : 0) + (f.scoreMin > 0 || f.scoreMax < 100 ? 1 : 0) + (f.within ? 1 : 0) + (f.kinds.size ? 1 : 0);
+  $('#fcount').textContent = n; $('#fcount').classList.toggle('on', n > 0);
+  $('#ftoggle').classList.toggle('on', $('#fpanel').classList.contains('on'));
+}
+function filterChanged(){ renderFilterChips(); rebuildScene(); renderTray(); }
+$('#fq').addEventListener('input', e => { state.filter.q = e.target.value.trim(); filterChanged(); });
+$('#ftoggle').addEventListener('click', () => { const on = $('#fpanel').classList.toggle('on'); $('#ftoggle').setAttribute('aria-expanded', on); $('#ftoggle').classList.toggle('on', on); });
+$('#fgroups').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const g = state.filter.groups; g.has(b.dataset.gid) ? g.delete(b.dataset.gid) : g.add(b.dataset.gid); filterChanged(); });
+$('#fkinds').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const k = state.filter.kinds; k.has(b.dataset.kind) ? k.delete(b.dataset.kind) : k.add(b.dataset.kind); filterChanged(); });
+let filterTimer = 0;
+function filterChangedSoon(){ $('#fscore-lbl').textContent = state.filter.scoreMin + ' to ' + state.filter.scoreMax; clearTimeout(filterTimer); filterTimer = setTimeout(filterChanged, 120); }
+$('#fsmin').addEventListener('input', e => { state.filter.scoreMin = Math.min(+e.target.value, state.filter.scoreMax); e.target.value = state.filter.scoreMin; filterChangedSoon(); });
+$('#fsmax').addEventListener('input', e => { state.filter.scoreMax = Math.max(+e.target.value, state.filter.scoreMin); e.target.value = state.filter.scoreMax; filterChangedSoon(); });
+$('#fwithin').addEventListener('change', e => { state.filter.within = +e.target.value; filterChanged(); });
+$('#fselect').addEventListener('click', () => { for (const s of shownSessions()) state.selected.add(s.id); refreshColors(); renderTray(); toast(state.selected.size + ' selected'); });
+$('#fclear').addEventListener('click', () => {
+  state.filter = { q: '', groups: new Set(), scoreMin: 0, scoreMax: 100, within: 0, kinds: new Set() };
+  $('#fq').value = ''; $('#fsmin').value = 0; $('#fsmax').value = 100; $('#fwithin').value = '';
+  filterChanged();
+});
+$('#lens').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  setLens(b.dataset.lens);
+});
+function setLens(l){
+  state.lens = l;
+  document.querySelectorAll('#lens button').forEach(x => x.classList.toggle('on', x.dataset.lens === l));
+  $('#legend-title').textContent = l === 'score' ? 'Height: keep score' : 'Height: recency';
+  refreshHeights();
+}
+$('#tabs').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  state.tab = b.dataset.tab;
+  document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
+  if (state.tab === 'gc') setLens('score');
+  renderTray();
+});
+$('#btn-clear').addEventListener('click', clearSelection);
+$('#btn-newgroup').addEventListener('click', () => openNewGroup());
+$('#btn-newgroup-top').addEventListener('click', () => openNewGroup());
+$('#btn-tags').addEventListener('click', () => openTagEditor());
+function openTagEditor(){
+  const sel = state.sessions.filter(s => state.selected.has(s.id));
+  const render = () => {
+    const tags = allCustomTags();
+    dlg.querySelector('#tg-chips').innerHTML = tags.length ? tags.map(t => {
+      const n = sel.filter(s => customTagsOf(s).includes(t)).length;
+      return `<button data-tag="${esc(t)}" class="${n === sel.length ? 'on' : ''}" title="${n} of ${sel.length} selected have this">${esc(t)}${n && n < sel.length ? ' <span style="color:var(--muted)">' + n + '/' + sel.length + '</span>' : ''}</button>`;
+    }).join('') : '<span style="font-size:12px;color:var(--muted)">No labels yet. Create one below.</span>';
+  };
+  const dlg = openModal(`<h3>Labels for ${sel.length} session${sel.length===1?'':'s'}</h3>
+    <div class="field"><span>Click a label to apply it to all selected; click again to remove it from all.</span><div class="chips" id="tg-chips"></div></div>
+    <div class="field"><span>New label</span><div class="tagedit"><input type="text" id="tg-new" placeholder="e.g. billing, needs-review, keep" autofocus><button class="btn primary" id="tg-add">Add</button></div></div>
+    <div class="actions"><button class="btn primary" data-close>Done</button></div>`);
+  render();
+  dlg.querySelector('#tg-chips').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const t = b.dataset.tag, all = sel.every(s => customTagsOf(s).includes(t));
+    for (const s of sel) setTag(s, t, !all);
+    save(); render(); renderTray();
+  });
+  const add = () => {
+    const t = dlg.querySelector('#tg-new').value.trim().toLowerCase().replace(/\s+/g, '-').slice(0, 24);
+    if (!t || AUTO_TAGS[t]) return;
+    for (const s of sel) setTag(s, t, true);
+    dlg.querySelector('#tg-new').value = ''; save(); render(); renderTray();
+  };
+  dlg.querySelector('#tg-add').addEventListener('click', add);
+  dlg.querySelector('#tg-new').addEventListener('keydown', e => { if (e.key === 'Enter') add(); });
+}
+$('#addto').addEventListener('change', e => {
+  const v = e.target.value; if (!v) return;
+  const ids = [...state.selected];
+  ids.forEach(id => { const s = state.sessions.find(x => x.id === id); if (s) s.customGroup = v === '__home' ? null : v; });
+  save(); rebuildScene(); clearSelection();
+  toast(v === '__home' ? ids.length + ' returned home' : ids.length + ' added to ' + state.groups[v].name);
+  if (v !== '__home') focusGroup(v);
+});
+
+// ============================================================ groups
+function openNewGroup(){ openGroupEditor(null); }
+function openGroupEditor(gid){
+  const g = gid ? state.groups[gid] : null;
+  const others = state.groupOrder.filter(x => x !== gid).map(x => ({ ...state.groups[x].color, name: state.groups[x].name }));
+  const autoNames = { running: 'Running', fork: 'Fork', review: 'Review', edits: 'Edited files' };
+  const selected = state.sessions.filter(s => state.selected.has(s.id) && s.status !== 'archived');
+  const members = new Set(g ? liveSessions().filter(s => s.customGroup === gid).map(s => s.id) : (selected.length ? selected.map(s => s.id) : []));
+  const bySource = src => src === 'selected' ? selected : liveSessions().filter(s => tagsOf(s).includes(src.slice(4)));
+  const dlg = openModal(`<h3>${g ? 'Edit swarm' : 'New swarm'}</h3>
+    <div class="field"><span>Swarm name (a task force, a customer, an epic): cells from any hive, in one place</span><input type="text" id="ng-name" placeholder="e.g. Billing migration" value="${g ? esc(g.name) : ''}" autofocus></div>
+    <div class="field"><span>Add or remove by</span><div class="chips" id="ng-src">
+      ${selected.length ? `<button data-src="selected">Selected (${selected.length})</button>` : ''}
+      ${Object.keys(AUTO_TAGS).map(k => `<button class="auto" data-src="tag:${k}">${autoNames[k]}</button>`).join('')}
+      ${allCustomTags().map(t => `<button data-src="tag:${esc(t)}">${esc(t)}</button>`).join('')}
+    </div></div>
+    <div class="field"><span id="ng-count"></span><div class="members" id="ng-members"></div></div>
+    <div class="field"><span>Swarm color on the map. Cells keep their hive's color.</span><div id="ng-picker"></div></div>
+    <div class="actions">${g ? '<button class="btn danger" id="ng-dissolve" style="margin-right:auto">Dissolve swarm</button>' : ''}<button class="btn" data-close>Cancel</button><button class="btn primary" id="ng-save"></button></div>`);
+  const picker = buildPicker(dlg.querySelector('#ng-picker'), { initial: g ? g.color : suggestColors(others, 1)[0], others });
+  const refresh = () => {
+    const list = [...members].map(id => state.sessions.find(x => x.id === id)).filter(Boolean).sort((a,b) => b.lastActiveAt - a.lastActiveAt);
+    dlg.querySelector('#ng-count').textContent = list.length ? `${list.length} member${list.length===1?'':'s'}` : 'No members yet. Add by label or selection, or create it empty and fill it later.';
+    dlg.querySelector('#ng-members').innerHTML = list.map(s => `<span class="member" style="--rowc:${cssOf(state.groups[s.repo].color)}"><i></i>${esc(s.title)}<button data-rm="${s.id}" title="Remove">×</button></span>`).join('');
+    dlg.querySelector('#ng-save').textContent = g ? 'Save changes' : (list.length ? `Create with ${list.length}` : 'Create empty swarm');
+    dlg.querySelectorAll('#ng-src button').forEach(b => { const l = bySource(b.dataset.src); b.classList.toggle('on', l.length > 0 && l.every(s => members.has(s.id))); });
+  };
+  dlg.querySelector('#ng-src').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const l = bySource(b.dataset.src), all = l.length && l.every(s => members.has(s.id));
+    for (const s of l) all ? members.delete(s.id) : members.add(s.id);
+    refresh();
+  });
+  dlg.querySelector('#ng-members').addEventListener('click', e => { const b = e.target.closest('[data-rm]'); if (!b) return; members.delete(b.dataset.rm); refresh(); });
+  const commit = () => {
+    const name = dlg.querySelector('#ng-name').value.trim() || (g ? g.name : 'Untitled group');
+    const id = gid || 'custom:' + Date.now().toString(36);
+    if (!g){ state.groups[id] = { id, name, kind: 'custom', color: picker.get() }; state.groupOrder.push(id); }
+    else { g.name = name; g.color = picker.get(); }
+    for (const s of state.sessions){
+      if (members.has(s.id)) s.customGroup = id;
+      else if (s.customGroup === id) s.customGroup = null;
+    }
+    save(); closeModal(); rebuildScene(); clearSelection(); focusGroup(id);
+    toast(g ? `Saved ${name}` : (members.size ? `Created ${name} with ${members.size}` : `Created ${name}`));
+  };
+  refresh();
+  dlg.querySelector('#ng-save').addEventListener('click', commit);
+  dlg.querySelector('#ng-name').addEventListener('keydown', e => { if (e.key === 'Enter') commit(); });
+  const d = dlg.querySelector('#ng-dissolve'); if (d) d.addEventListener('click', () => { closeModal(); dissolveGroup(gid); });
+}
+function openGroupColor(gid){
+  const g = state.groups[gid];
+  const others = state.groupOrder.filter(x => x !== gid).map(x => ({ ...state.groups[x].color, name: state.groups[x].name }));
+  const dlg = openModal(`<h3>Color for ${esc(g.name)}</h3><div id="gc-picker"></div>
+    <div class="actions"><button class="btn" data-close>Cancel</button><button class="btn primary" id="gc-save">Save color</button></div>`);
+  const picker = buildPicker(dlg.querySelector('#gc-picker'), { initial: g.color, others });
+  dlg.querySelector('#gc-save').addEventListener('click', () => { g.color = picker.get(); save(); closeModal(); rebuildScene(); renderTray(); });
+}
+function dissolveGroup(gid){
+  const g = state.groups[gid];
+  state.sessions.forEach(s => { if (s.customGroup === gid) s.customGroup = null; });
+  delete state.groups[gid];
+  state.groupOrder = state.groupOrder.filter(x => x !== gid);
+  state.filter.groups.delete(gid);
+  if (state.focusGroup === gid) state.focusGroup = null;
+  save(); rebuildScene(); renderTray(); toast('Dissolved ' + g.name + ', sessions returned home');
+}
+
+// ============================================================ color picker component
+function buildPicker(container, { initial, others }){
+  let col = { l: initial.l, c: initial.c, h: initial.h };
+  const sugg = suggestColors(others, 4);
+  container.className = 'picker';
+  container.innerHTML = `
+    <div class="sugg"><span>Suggested</span>${sugg.map((c,i) => `<button data-i="${i}" style="background:${cssOf(c)}" title="oklch(${c.l.toFixed(2)} ${c.c.toFixed(2)} ${Math.round(c.h)})"></button>`).join('')}</div>
+    <canvas width="180" height="90"></canvas>
+    <div class="lrow"><span style="font-size:12px;color:var(--muted)">Lightness</span><input type="range" min="0.35" max="0.9" step="0.005" value="${col.l}"></div>
+    <div class="prev"><div class="sw"></div><div class="txt"><b></b><span class="near"></span></div></div>`;
+  const cv = container.querySelector('canvas'), ctx = cv.getContext('2d');
+  const range = container.querySelector('input'), sw = container.querySelector('.sw'), lab = container.querySelector('b'), near = container.querySelector('.near');
+  function draw(){
+    const W = cv.width, H = cv.height, img = ctx.createImageData(W, H);
+    for (let y=0;y<H;y++) for (let x=0;x<W;x++){
+      const h = x/W*360, c = (1 - y/H) * 0.32;
+      const rgb = oklchToLinear(col.l, c, h);
+      const ok = rgb.every(v => v >= -0.002 && v <= 1.002);
+      const o = (y*W + x)*4;
+      const out = ok ? rgb : oklchToLinear(col.l, 0, h);
+      img.data[o] = lin2srgb(clamp(out[0],0,1))*255; img.data[o+1] = lin2srgb(clamp(out[1],0,1))*255; img.data[o+2] = lin2srgb(clamp(out[2],0,1))*255; img.data[o+3] = ok ? 255 : 90;
+    }
+    ctx.putImageData(img, 0, 0);
+    const px = col.h/360*W, py = (1 - col.c/0.32)*H;
+    ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI*2); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(px, py, 6.5, 0, Math.PI*2); ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = 1; ctx.stroke();
+  }
+  function refresh(){
+    draw();
+    sw.style.background = cssOf(col);
+    lab.textContent = `oklch(${col.l.toFixed(2)} ${col.c.toFixed(2)} ${Math.round(col.h)})`;
+    if (others.length){
+      let best = null, bd = Infinity;
+      others.forEach(o => { const d = deltaE(col, o); if (d < bd){ bd = d; best = o; } });
+      near.textContent = `Closest existing: ${best.name || 'another group'}, distance ${bd.toFixed(0)}`;
+      near.classList.toggle('warn', bd < 12);
+    } else near.textContent = 'First group, any color works.';
+    container.querySelectorAll('.sugg button').forEach((b,i) => b.classList.toggle('on', Math.abs(sugg[i].h - col.h) < 1 && Math.abs(sugg[i].c - col.c) < 0.005));
+  }
+  let down = false;
+  const fromEvent = e => { const r = cv.getBoundingClientRect(); col.h = clamp((e.clientX - r.left)/r.width, 0, 0.9999)*360; col.c = clamp(1 - (e.clientY - r.top)/r.height, 0, 1)*0.32; refresh(); };
+  cv.addEventListener('pointerdown', e => { down = true; cv.setPointerCapture(e.pointerId); fromEvent(e); });
+  cv.addEventListener('pointermove', e => { if (down) fromEvent(e); });
+  cv.addEventListener('pointerup', () => { down = false; });
+  range.addEventListener('input', () => { col.l = parseFloat(range.value); refresh(); });
+  container.querySelector('.sugg').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; col = { ...sugg[+b.dataset.i] }; range.value = col.l; refresh(); });
+  refresh();
+  return { get: () => ({ ...col }) };
+}
+
+// ============================================================ garbage collection tab
+function renderGc(){
+  const cands = liveSessions().filter(s => s.score < state.threshold && state.decisions[s.id] !== 'keep' && !s.active).sort((a,b) => a.score - b.score);
+  const kept = Object.values(state.decisions).filter(d => d === 'keep').length;
+  let html = `<div class="gc-head">The keeper suggests culling cells scoring below <b id="thr">${state.threshold}</b>. Height in the world now shows the score, so candidates are the low ones.
+    <input type="range" id="thr-range" min="5" max="80" step="1" value="${state.threshold}"><div>${cands.length} candidate${cands.length===1?'':'s'}${kept ? ', ' + kept + ' excluded by you' : ''}</div></div>`;
+  if (!cands.length) html += '<div class="empty">Nothing to collect at this threshold.</div>';
+  cands.forEach(s => {
+    const g = state.groups[s.repo];
+    html += `<div class="gcard" data-id="${s.id}">
+      <div class="top"><span class="bar" style="background:${cssOf(shadeOf(g.color, recencyOf(s), false))}"></span><span class="title" title="${esc(s.title)}">${esc(s.title)}</span><span class="sc">${s.score}</span></div>
+      <div class="why">${s.reasons.map(r => `<span>${esc(r)}</span>`).join('') || '<span>low score</span>'}<span>${esc(g.name)}</span><span>${esc(ageText(s.lastActiveAt))}</span></div>
+      <div class="acts"><button class="btn" data-gc="keep">Keep</button><button class="btn" data-gc="archive">Archive</button><button class="btn primary" data-gc="summ">Summarize and archive</button></div>
+    </div>`;
+  });
+  listEl.innerHTML = html;
+  const r = $('#thr-range');
+  r.addEventListener('input', () => { state.threshold = +r.value; $('#thr').textContent = r.value; });
+  r.addEventListener('change', () => renderGc());
+}
+listEl.addEventListener('click', e => {
+  const b = e.target.closest('[data-gc]'); if (!b) return;
+  const card = b.closest('.gcard'); const s = state.sessions.find(x => x.id === card.dataset.id); if (!s) return;
+  const act = b.dataset.gc;
+  if (act === 'keep'){ state.decisions[s.id] = 'keep'; save(); renderGc(); toast('Kept, will not be suggested again'); }
+  else if (act === 'archive'){ archive(s, false); }
+  else if (act === 'summ'){
+    const g = state.groups[s.repo];
+    const summary = `# ${s.title}\n\nrepo: ${g.name}\nlast active: ${new Date(s.lastActiveAt).toISOString().slice(0,10)}\nmessages: ${s.msgCount}, tool calls: ${s.toolCalls}, files edited: ${s.filesEdited}${s.parentId ? '\nforked from: ' + s.parentId : ''}\n\n## What happened\n(In the real tool this paragraph comes from \`claude -p\` reading the transcript.)\n\n## Why it was archived\n${s.reasons.map(r => '- ' + r).join('\n')}\n`;
+    const dlg = openModal(`<h3>Honey: the summary kept when this cell is archived</h3><pre>${esc(summary)}</pre>
+      <div class="field"><span>Would be written to archive/${esc(g.name)}/${s.id}.md next to the transcript.</span></div>
+      <div class="actions"><button class="btn" data-close>Cancel</button><button class="btn primary" id="sum-ok">Save summary and archive</button></div>`);
+    dlg.querySelector('#sum-ok').addEventListener('click', () => { closeModal(); archive(s, true); });
+  }
+});
+function archive(s, withSummary){
+  s.status = 'archived'; state.decisions[s.id] = 'archived'; state.selected.delete(s.id);
+  save(); rebuildScene(); renderTray();
+  toast((withSummary ? 'Summary saved, ' : '') + 'archived ' + s.title);
+}
+
+// ============================================================ modal, toast
+const modalEl = $('#modal');
+function openModal(html){
+  modalEl.innerHTML = `<div class="dialog" role="dialog" aria-modal="true">${html}</div>`;
+  modalEl.classList.add('on');
+  modalEl.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeModal));
+  const af = modalEl.querySelector('[autofocus]'); if (af) setTimeout(() => af.focus(), 0);
+  return modalEl.firstElementChild;
+}
+function closeModal(){ modalEl.classList.remove('on'); modalEl.innerHTML = ''; }
+modalEl.addEventListener('click', e => { if (e.target === modalEl) closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape'){ if (modalEl.classList.contains('on')) closeModal(); else if (state.selected.size) clearSelection(); } });
+let toastT = 0;
+function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2200); }
+
+// ============================================================ boot and loop
+function resize(){
+  const w = world.clientWidth, h = world.clientHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  GLOW.setSize(w, h);
+}
+window.addEventListener('resize', resize);
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', renderTray);
+
+makeData(); load(); resize(); rebuildScene(); renderTray(); setWorldColor(state.world);
+viewOverview(); orbit.cur.radius = orbit.goal.radius + 40; orbit.cur.phi = ANGLE_45;
+$('#sort').value = state.sort; $('#groupby').value = state.groupBy;
+
+let last = performance.now(), reported = false;
+function frame(now){
+  try { tick(now); }
+  catch (err){ if (!reported){ reported = true; $('#hud').textContent = 'Render error: ' + (err && err.message || err); console.error(err); } }
+  requestAnimationFrame(frame);
+}
+function tick(now){
+  const dt = clamp((now - last)/1000, 0, 0.05); last = now;   // never negative: a backwards clock would extrapolate the camera away
+  orbit.update(dt);
+
+  if (heightsAnimating){
+    const k = 1 - Math.exp(-dt*6);
+    let moving = false;
+    for (const s of hexIndex){
+      if (Math.abs(s.h - s.hTarget) < 0.003){ if (s.h !== s.hTarget){ s.h = s.hTarget; setHexMatrix(s); } continue; }
+      s.h = lerp(s.h, s.hTarget, k); setHexMatrix(s); moving = true;
+    }
+    markBatchesDirty();
+    heightsAnimating = moving;
+  }
+
+  // one shared, shallow breath for every running session
+  const pulse = 0.5 + 0.5*Math.sin(now/1000 * 3.0);
+  for (const a of actives){
+    a.hCore.value = a.s.h;
+    a.core.material.emissiveIntensity = 0.35 + 0.3*pulse;
+    a.glowMat.color.copy(a.glowLo).lerp(a.glowHi, pulse);
+    a.light.position.y = a.s.h + 1; a.light.intensity = 0.35 + 0.25*pulse;
+    // the shell swells a little and fades, then draws back and brightens
+    const grow = 1.1 + 0.14*pulse;
+    a.haze.scale.set(grow, 1, grow); a.hHaze.value = a.s.h + 0.15 + 0.3*pulse;
+    a.haze.material.opacity = 0.26 - 0.16*pulse;
+    a.spill.material.opacity = 0.1 + 0.08*pulse;
+  }
+
+  updateLabels();
+  renderWithBloom();
+}
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
