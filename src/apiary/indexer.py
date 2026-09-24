@@ -16,6 +16,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from apiary.colors import suggest
 from apiary.db import transaction
 from apiary.models import Session
 from apiary.scoring import score_session
@@ -171,10 +172,12 @@ def _index_one(
                    status=CASE WHEN sessions.status='archived' THEN 'archived' ELSE excluded.status END""",
             session.model_dump(),
         )
-        conn.execute(
-            "INSERT INTO groups(id, name, kind) VALUES(?, ?, 'repo') ON CONFLICT(id) DO NOTHING",
-            (group_id, repo_name),
-        )
+        if not conn.execute("SELECT 1 FROM groups WHERE id=?", (group_id,)).fetchone():
+            taken = [r["color"] for r in conn.execute("SELECT color FROM groups WHERE color IS NOT NULL")]
+            conn.execute(
+                "INSERT INTO groups(id, name, kind, color) VALUES(?, ?, 'repo', ?)",
+                (group_id, repo_name, suggest(taken, 1)[0]),
+            )
         conn.execute(
             "DELETE FROM group_members WHERE session_id=? AND group_id != ? "
             "AND group_id IN (SELECT id FROM groups WHERE kind='repo')",
