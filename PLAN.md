@@ -60,7 +60,8 @@ Python 3.12, managed with `uv`.
   threads; Pydantic models double as the entity definitions and the OpenAPI
   spec feeds a generated TypeScript client later.
 - **sqlite3** (stdlib), WAL mode, indices on `(repo_name, last_active_at)`,
-  `mtime`, `parent_id`, `score`.
+  `mtime`, `parent_id`, `score`. The database is a rebuildable index: `SCHEMA_VERSION`
+  migrates it in place, `INDEX_VERSION` forces a full re-read when parsing changes.
 - **watchfiles** for the directory watcher.
 - **typer** for the CLI: `apiary serve`, `apiary index`, `apiary config`.
 
@@ -71,7 +72,7 @@ Modules under `src/apiary/`:
 | `config.py`     | load and validate the TOML config, expand paths                |
 | `db.py`         | connection, schema, migrations                                 |
 | `models.py`     | Pydantic entities                                              |
-| `indexer.py`    | walk `claude_dir`, `stat`, re-parse only where `mtime` changed |
+| `indexer.py`    | walk `claude_dir`, one file per session, re-parse only what changed |
 | `watcher.py`    | file events → live status, incremental reindex, websocket push |
 | `scoring.py`    | features → weighted score + reasons, from a policy             |
 | `gc.py`         | archive / summarise / purge                                    |
@@ -81,8 +82,9 @@ Modules under `src/apiary/`:
 ## Entities
 
 ```
-Session      id, repo_path, repo_name, branch, title, created_at, last_active_at,
-             mtime, size_bytes, msg_count, tool_calls, files_edited, parent_id,
+Session      id (transcript file stem), repo_path, repo_name, worktree, branch, title,
+             created_at, last_active_at, mtime, size_bytes, msg_count, tool_calls,
+             files_edited, parent_id (session forked from),
              status (live | idle | archived | purged)
 Group        id, name, kind (repo | custom), color_oklch
 GroupMember  group_id, session_id

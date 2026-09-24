@@ -1,53 +1,56 @@
-# Handoff — where Apiary stands (24 Sep 2026)
+# Handoff — where Apiary stands (24 Sep 2026, evening)
 
 ## Repo
 
 `~/mydev/apiary`, branch `main`, remote `https://github.com/DannyMor/apiary.git` (personal
-account; see CLAUDE.md for the account rules). Five commits: plan, skeleton, prototype,
-indexer, Claude Code guidance. Author on every commit is
-`Danny Mor <19153512+DannyMor@users.noreply.github.com>`.
+account; CLAUDE.md has the account rules). Author on every commit is
+`Danny Mor <19153512+DannyMor@users.noreply.github.com>`. `git log` tells the story: plan,
+skeleton, prototype, indexer, guidance, then the indexer fixes below.
 
 `uv sync && uv run pytest -q && uv run ruff check . && uv run ruff format --check .` all pass
-on this machine (11 tests). Python 3.12.12 via uv.
+(23 tests). Python 3.12.12 via uv.
 
 ## What exists
 
 - `PLAN.md`: architecture, entities, API, vocabulary, build order.
 - `src/apiary/`: `config.py` (TOML at `~/.config/apiary/apiary.toml`, `APIARY_CONFIG`),
-  `db.py` (full schema, versioned), `models.py`, `transcript.py` (defensive JSONL reader),
-  `scoring.py` (rule-based keep-score 0–100 with reasons), `indexer.py` (mtime/size
-  incremental, marks vanished transcripts `purged`, creates repo groups, scores),
+  `db.py` (schema v2, migrated in place), `models.py`, `transcript.py` (defensive JSONL
+  reader), `scoring.py` (rule-based keep-score 0–100 with reasons), `indexer.py`
+  (incremental, one file per session, forks, relocations, purge, repo groups, scores),
   `api.py` (`/api/health`, `/api/sessions` with sort/group/status, `/api/sessions/{id}`,
   `/api/groups`, `/api/index/refresh|status`, serves the UI at `/`), `cli.py`.
-- `tests/`: 11 tests, all passing; ruff clean.
+- `tests/`: 23 tests built from the real transcript shapes (`tests/fixtures.py` writes
+  plain, forked, preambled and custom-titled transcripts).
 - `web/prototype/apiary.html`: the complete UI prototype on mock data.
 
-## What the real transcripts showed (indexed `~/.claude/projects` on 24 Sep 2026)
+## How the indexer models a session (verified against `~/.claude/projects`, 24 Sep 2026)
 
-`uv run apiary index`: 63 files scanned in 0.9s, 56 session rows, 24 repo groups, 1 live.
-Timestamps, `cwd`, `gitBranch`, `isSidechain`, message counts and live detection all behave.
-Three things do not, and they should be fixed before stage 5 builds on session identity:
+- **A session is a transcript file; `sessions.id` is the file stem.** A fork begins with its
+  ancestors' records copied verbatim, each still carrying the ancestor's `sessionId`; those
+  records only set `parent_id` (the nearest ancestor) and are not counted as the fork's
+  conversation. Real data: 5 forks, one chain three deep, all with the right parent, and
+  `fork with no divergence` fires for the ones that edited ≤ 1 file.
+- **A relocated session leaves a frozen copy behind** in its old project dir under the same
+  name (`relocated` records mark the move). Only the newest file per stem is indexed; the
+  rest are reported as `superseded`. Purging is by session id, so a move is not a
+  disappearance.
+- **Title precedence:** `custom-title` record (written when a session is renamed) → first
+  user prompt that is not `isMeta` (skill preambles are `isMeta`) → `summary` record.
+- **Hive = repo.** A cwd under `<repo>/.claude/worktrees/<name>` belongs to `<repo>`; the
+  worktree name is kept in `sessions.worktree`. Re-indexing a session drops stale repo
+  memberships; repo groups with no unpurged members are deleted (custom groups stay).
+- **Two version stamps in `meta`.** `SCHEMA_VERSION` runs `MIGRATIONS` on an existing
+  database (fresh ones get the full `SCHEMA`); bump `INDEX_VERSION` whenever parsing or row
+  derivation changes and every file is re-read once on the next index.
 
-1. **One `sessionId` can span several files.** 5 ids cover 12 files, in two shapes:
-   the same id in two project dirs after a worktree move (`relocated` records exist), and
-   files whose stem differs from the `sessionId` inside them (resumes/forks; e.g. three
-   files in one project dir all carry the same id). `sessions.id` is the sessionId, so the
-   later file overwrites the row and its `transcript` path, and the other files re-index on
-   every refresh (`indexed 7` each time). Key rows on the transcript path (or file stem),
-   keep `session_id` as a column, and treat stem ≠ sessionId as the fork signal:
-   `parent_id = sessionId`. That also answers the open question about fork detection.
-2. **Titles pick up injected preambles.** First user text is often a skill preamble
-   ("Base directory for this skill: …", "Review target: …", "The user just ran /insights…").
-   Claude Code writes `custom-title` records (`customTitle`, 4500 seen) and `last-prompt`
-   records; prefer `custom-title`, then the first user text that is not a preamble.
-3. **Worktrees masquerade as repos.** `cwd` like
-   `~/src/<repo>/.claude/worktrees/<name>` gives `repo_name = <name>`,
-   so 24 groups exist for about 8 real repos. Collapse `<repo>/.claude/worktrees/<wt>` to
-   `<repo>` for the hive, keep the worktree name on the session.
+Numbers on this machine after the fixes: 62 files → 60 sessions + 2 superseded copies,
+7 hives (was 24), 0 preamble titles (was 8), second `apiary index` = `indexed 0` in 0.01s.
 
-Record types seen and correctly ignored: `attachment`, `queue-operation`, `last-prompt`,
-`custom-title`, `mode`, `pr-link`, `system`, `atis-latch`, `relocated`, `worktree-state`,
-`frame-link`, `file-history-snapshot`, `agent-name`, `permission-mode`.
+Record types seen and ignored on purpose: `attachment`, `queue-operation`, `last-prompt`,
+`mode`, `pr-link`, `system`, `atis-latch`, `worktree-state`, `frame-link`,
+`file-history-snapshot`, `agent-name`, `permission-mode`. `msg_count` still counts tool
+results (they are `user` records), so it overstates conversation length; `agent-name`
+(`agentName`) could be a title fallback for named agent sessions. Neither is urgent.
 
 ## Decisions already made (don't reopen without reason)
 
@@ -60,6 +63,5 @@ Record types seen and correctly ignored: `attachment`, `queue-operation`, `last-
 
 ## Next
 
-Fix the three indexer findings above (with tests built from the real shapes), then stage 5:
-`watcher.py` with `watchfiles`, `WS /api/events`, live status pushed to the UI; then stage 6
-moves swarms, tags and keeper decisions from browser storage into SQLite.
+Stage 5: `watcher.py` with `watchfiles`, `WS /api/events`, live status pushed to the UI;
+then stage 6 moves swarms, tags and keeper decisions from browser storage into SQLite.
