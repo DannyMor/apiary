@@ -170,3 +170,19 @@ def test_repo_group_disappears_when_its_only_session_is_purged(tmp_path: Path) -
     index_all(conn, claude)
     assert conn.execute("SELECT status FROM sessions WHERE id='g1'").fetchone()[0] == "purged"
     assert conn.execute("SELECT COUNT(*) FROM groups").fetchone()[0] == 0
+
+
+def test_report_lists_the_sessions_a_run_changed(tmp_path: Path) -> None:
+    claude = tmp_path / "projects"
+    now = datetime.now(UTC)
+    write_transcript(claude, "/r/a", "c1", "one", start=now - timedelta(days=1))
+    p2 = write_transcript(claude, "/r/a", "c2", "two", start=now - timedelta(days=1))
+    conn = connect(tmp_path / "apiary.db")
+    assert sorted(index_all(conn, claude).changed) == ["c1", "c2"]
+    assert index_all(conn, claude).changed == []
+
+    p2.write_text(p2.read_text() + '{"type":"user","message":{"role":"user","content":"more"}}\n')
+    assert index_all(conn, claude).changed == ["c2"]
+
+    p2.unlink()
+    assert index_all(conn, claude).changed == ["c2"]

@@ -13,7 +13,7 @@ import json
 import os
 import sqlite3
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from apiary.db import transaction
@@ -34,6 +34,7 @@ class IndexReport:
     superseded: int = 0
     purged: int = 0
     duration_s: float = 0.0
+    changed: list[str] = field(default_factory=list)  # session ids indexed or purged by this run
 
 
 def index_all(conn: sqlite3.Connection, claude_dir: Path, now: float | None = None) -> IndexReport:
@@ -57,6 +58,7 @@ def index_all(conn: sqlite3.Connection, claude_dir: Path, now: float | None = No
             continue
         _index_one(conn, project_dir, path, st.st_mtime, st.st_size, now)
         report.indexed += 1
+        report.changed.append(session_id)
 
     gone = [k for k in known if k not in seen]
     if gone:
@@ -64,6 +66,7 @@ def index_all(conn: sqlite3.Connection, claude_dir: Path, now: float | None = No
             for k in gone:
                 conn.execute("UPDATE sessions SET status='purged' WHERE id=?", (k,))
         report.purged = len(gone)
+        report.changed.extend(gone)
     conn.execute(
         """DELETE FROM groups WHERE kind='repo' AND id NOT IN (
                SELECT gm.group_id FROM group_members gm JOIN sessions s ON s.id=gm.session_id
