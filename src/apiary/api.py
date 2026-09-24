@@ -1,26 +1,29 @@
-"""HTTP API and static UI.
+"""HTTP API, websocket events and static UI.
 
 ``create_app(config)`` builds the FastAPI app; ``apiary serve`` runs it with uvicorn.
 All endpoints are ``async`` so the single SQLite connection is only ever used from
-the event loop thread.
+the event loop thread; the watcher runs on that loop too.
 """
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from apiary import __version__
 from apiary.config import Config
 from apiary.db import connect
-from apiary.indexer import IndexReport, index_all
+from apiary.indexer import IndexReport
 from apiary.models import Group, Health, SessionOut
 from apiary.queries import SESSION_SQL, fetch_session, session_out
+from apiary.watcher import Hub, Watcher
 
 WEB_DIR = Path(__file__).resolve().parents[2] / "web"
 
@@ -40,10 +43,17 @@ def create_app(config: Config | None = None) -> FastAPI:
     async def lifespan(app: FastAPI):
         app.state.config = config
         app.state.db = connect(config.paths.db)
-        app.state.last_index = index_all(app.state.db, config.paths.claude_dir)
+        app.state.hub = Hub()
+        app.state.watcher = Watcher(app.state.db, config.paths.claude_dir, app.state.hub)
+        app.state.watcher.run_once()
+        watching = asyncio.create_task(app.state.watcher.run())
         try:
             yield
         finally:
+            app.state.watcher.stop()
+            watching.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await watching
             app.state.db.close()
 
     app = FastAPI(title="Apiary", version=__version__, lifespan=lifespan)
@@ -62,12 +72,24 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     @app.post("/api/index/refresh", response_model=IndexReport)
     async def refresh() -> IndexReport:
-        app.state.last_index = index_all(app.state.db, config.paths.claude_dir)
-        return app.state.last_index
+        return app.state.watcher.run_once()
 
     @app.get("/api/index/status", response_model=IndexReport)
     async def index_status() -> IndexReport:
-        return app.state.last_index
+        return app.state.watcher.last
+
+    @app.websocket("/api/events")
+    async def events(ws: WebSocket) -> None:
+        await ws.accept()
+        queue = app.state.hub.subscribe()
+        try:
+            async with asyncio.TaskGroup() as group:
+                group.create_task(_forward(ws, queue))
+                group.create_task(_until_closed(ws))
+        except* WebSocketDisconnect:
+            pass
+        finally:
+            app.state.hub.unsubscribe(queue)
 
     @app.get("/api/sessions", response_model=list[SessionOut])
     async def sessions(
@@ -117,6 +139,17 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     _mount_ui(app)
     return app
+
+
+async def _forward(ws: WebSocket, queue: asyncio.Queue[dict]) -> None:
+    while True:
+        await ws.send_json(await queue.get())
+
+
+async def _until_closed(ws: WebSocket) -> None:
+    """Consume (and ignore) client frames so a disconnect is noticed even when nothing is being sent."""
+    while True:
+        await ws.receive_text()
 
 
 def _mount_ui(app: FastAPI) -> None:

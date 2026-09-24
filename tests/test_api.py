@@ -73,3 +73,17 @@ def test_session_exposes_worktree(config: Config) -> None:
     with TestClient(create_app(config)) as client:
         s = client.get("/api/sessions/w1").json()
         assert (s["repo_name"], s["worktree"]) == ("orca", "review-pr-1")
+
+
+def test_events_websocket_streams_index_changes(config: Config) -> None:
+    with TestClient(create_app(config)) as client, client.websocket_connect("/api/events") as ws:
+        write_transcript(
+            config.paths.claude_dir, "/u/src/api-server", "e1", "Add websocket", start=datetime.now(UTC)
+        )
+        assert client.post("/api/index/refresh").json()["changed"] == ["e1"]
+        seen = []
+        while not any(e["type"] == "index.progress" for e in seen):
+            seen.append(ws.receive_json())
+        assert {"type": "session.live", "id": "e1", "live": True} in seen
+        updated = next(e for e in seen if e["type"] == "session.updated")
+        assert (updated["session"]["id"], updated["session"]["status"]) == ("e1", "live")
