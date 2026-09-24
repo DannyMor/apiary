@@ -7,7 +7,10 @@ import sqlite3
 
 from apiary.models import Group, Session, SessionOut
 
-SESSION_SQL = "SELECT s.*, sc.score, sc.reasons FROM sessions s LEFT JOIN scores sc ON sc.session_id = s.id"
+SESSION_SQL = (
+    "SELECT s.*, sc.score, sc.reasons, d.decision FROM sessions s "
+    "LEFT JOIN scores sc ON sc.session_id = s.id LEFT JOIN gc_decisions d ON d.session_id = s.id"
+)
 
 
 def session_out(conn: sqlite3.Connection, row: sqlite3.Row) -> SessionOut:
@@ -25,6 +28,7 @@ def session_out(conn: sqlite3.Connection, row: sqlite3.Row) -> SessionOut:
         reasons=json.loads(row["reasons"]) if row["reasons"] else [],
         tags=tags,
         groups=groups,
+        decision=row["decision"],
     )
 
 

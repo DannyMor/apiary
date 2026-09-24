@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 Status = Literal["live", "idle", "archived", "purged"]
+Decision = Literal["keep", "archive", "summarize_archive"]
 
 
 class Session(BaseModel):
@@ -41,6 +42,7 @@ class SessionOut(Session):
     reasons: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     groups: list[str] = Field(default_factory=list)
+    decision: Decision | None = None
 
 
 class Group(BaseModel):
@@ -78,6 +80,11 @@ class TagIn(BaseModel):
 class TagCount(BaseModel):
     tag: str
     count: int
+
+
+class DecisionIn(BaseModel):
+    session_id: str
+    decision: Decision
 
 
 class Health(BaseModel):

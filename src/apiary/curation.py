@@ -7,6 +7,7 @@ deleted, but they can be renamed and recolored.
 from __future__ import annotations
 
 import sqlite3
+import time
 import uuid
 
 from apiary.colors import suggest
@@ -95,6 +96,35 @@ def tag_counts(conn: sqlite3.Connection) -> list[tuple[str, int]]:
         "WHERE s.status != 'purged' GROUP BY t.tag ORDER BY t.tag"
     )
     return [(r["tag"], r["n"]) for r in rows]
+
+
+def set_decision(conn: sqlite3.Connection, session_id: str, decision: str) -> None:
+    _require_sessions(conn, [session_id])
+    with transaction(conn):
+        conn.execute(
+            "INSERT INTO gc_decisions(session_id, decision, decided_at) VALUES(?, ?, ?) "
+            "ON CONFLICT(session_id) DO UPDATE SET decision=excluded.decision, "
+            "decided_at=excluded.decided_at, applied_at=NULL, summary_path=NULL",
+            (session_id, decision, time.time()),
+        )
+
+
+def clear_decision(conn: sqlite3.Connection, session_id: str) -> None:
+    _require_sessions(conn, [session_id])
+    with transaction(conn):
+        conn.execute("DELETE FROM gc_decisions WHERE session_id=?", (session_id,))
+
+
+def candidate_ids(conn: sqlite3.Connection, threshold: int) -> list[str]:
+    """Idle sessions scoring below ``threshold`` that the person has not marked ``keep``, worst first."""
+    rows = conn.execute(
+        "SELECT s.id FROM sessions s JOIN scores sc ON sc.session_id = s.id "
+        "LEFT JOIN gc_decisions d ON d.session_id = s.id "
+        "WHERE s.status = 'idle' AND sc.score < ? AND (d.decision IS NULL OR d.decision != 'keep') "
+        "ORDER BY sc.score ASC, s.last_active_at ASC",
+        (threshold,),
+    )
+    return [r["id"] for r in rows]
 
 
 def _require_group(conn: sqlite3.Connection, group_id: str) -> str:

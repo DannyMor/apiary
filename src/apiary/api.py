@@ -22,7 +22,17 @@ from apiary.config import Config
 from apiary.curation import RepoHive, UnknownId
 from apiary.db import connect
 from apiary.indexer import IndexReport
-from apiary.models import Group, GroupPatch, Health, MembersIn, SessionOut, SwarmIn, TagCount, TagIn
+from apiary.models import (
+    DecisionIn,
+    Group,
+    GroupPatch,
+    Health,
+    MembersIn,
+    SessionOut,
+    SwarmIn,
+    TagCount,
+    TagIn,
+)
 from apiary.queries import SESSION_SQL, fetch_group, fetch_groups, fetch_session, session_out
 from apiary.watcher import Hub, Watcher
 
@@ -174,6 +184,21 @@ def create_app(config: Config | None = None) -> FastAPI:
     @app.delete("/api/sessions/{session_id}/tags/{tag}", response_model=SessionOut)
     async def remove_tag(session_id: str, tag: str) -> SessionOut:
         curation.remove_tag(app.state.db, session_id, tag)
+        return _session_changed(app, session_id)
+
+    @app.get("/api/gc/candidates", response_model=list[SessionOut])
+    async def gc_candidates(threshold: int = Query(35, ge=0, le=100)) -> list[SessionOut]:
+        found = (fetch_session(app.state.db, sid) for sid in curation.candidate_ids(app.state.db, threshold))
+        return [s for s in found if s is not None]
+
+    @app.post("/api/gc/decisions", response_model=SessionOut)
+    async def decide(body: DecisionIn) -> SessionOut:
+        curation.set_decision(app.state.db, body.session_id, body.decision)
+        return _session_changed(app, body.session_id)
+
+    @app.delete("/api/gc/decisions/{session_id}", response_model=SessionOut)
+    async def undecide(session_id: str) -> SessionOut:
+        curation.clear_decision(app.state.db, session_id)
         return _session_changed(app, session_id)
 
     _mount_ui(app)
