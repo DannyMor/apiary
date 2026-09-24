@@ -17,7 +17,7 @@ from pathlib import Path
 from apiary.db import transaction
 from apiary.models import Session
 from apiary.scoring import score_session
-from apiary.transcript import read_transcript, repo_name_from_dir, repo_path_from_dir
+from apiary.transcript import read_transcript, repo_name_from_dir, repo_path_from_dir, split_worktree
 
 LIVE_WINDOW_SECONDS = 120.0  # a transcript written this recently counts as running
 
@@ -79,7 +79,7 @@ def _index_one(
 ) -> None:
     facts = read_transcript(path)
     session_id = facts.session_id or path.stem
-    repo_path = facts.cwd or repo_path_from_dir(project_dir)
+    repo_path, worktree = split_worktree(facts.cwd) if facts.cwd else (repo_path_from_dir(project_dir), None)
     repo_name = Path(repo_path).name or repo_name_from_dir(project_dir)
     last = facts.last_ts or mtime
     created = facts.first_ts or last
@@ -100,16 +100,18 @@ def _index_one(
         parent_id=facts.parent_id,
         status=status,
         transcript=str(path),
+        worktree=worktree,
     )
     scored = score_session(session, now)
     group_id = f"repo:{repo_name}"
     with transaction(conn):
         conn.execute(
             """INSERT INTO sessions(id, repo_path, repo_name, branch, title, created_at, last_active_at,
-                   mtime, size_bytes, msg_count, tool_calls, files_edited, parent_id, status, transcript)
+                   mtime, size_bytes, msg_count, tool_calls, files_edited, parent_id, status, transcript,
+                   worktree)
                VALUES(:id, :repo_path, :repo_name, :branch, :title, :created_at, :last_active_at,
                    :mtime, :size_bytes, :msg_count, :tool_calls, :files_edited, :parent_id, :status,
-                   :transcript)
+                   :transcript, :worktree)
                ON CONFLICT(id) DO UPDATE SET
                    repo_path=excluded.repo_path, repo_name=excluded.repo_name, branch=excluded.branch,
                    title=excluded.title, created_at=excluded.created_at,
@@ -117,6 +119,7 @@ def _index_one(
                    mtime=excluded.mtime, size_bytes=excluded.size_bytes, msg_count=excluded.msg_count,
                    tool_calls=excluded.tool_calls, files_edited=excluded.files_edited,
                    parent_id=excluded.parent_id, transcript=excluded.transcript,
+                   worktree=excluded.worktree,
                    status=CASE WHEN sessions.status='archived' THEN 'archived' ELSE excluded.status END""",
             session.model_dump(),
         )

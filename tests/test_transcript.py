@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
-from apiary.transcript import read_transcript, repo_name_from_dir, repo_path_from_dir
+from apiary.transcript import read_transcript, repo_name_from_dir, repo_path_from_dir, split_worktree
 
 from .fixtures import write_transcript
 
@@ -45,3 +45,11 @@ def test_dir_decoding() -> None:
     d = Path("/x/-Users-me-src-api-server")
     assert repo_name_from_dir(d) == "server"  # segments are ambiguous; cwd inside the file is preferred
     assert repo_path_from_dir(d) == "/Users/me/src/api/server"
+
+
+def test_split_worktree() -> None:
+    assert split_worktree("/u/src/orca/.claude/worktrees/review-pr-1/services/x") == (
+        "/u/src/orca",
+        "review-pr-1",
+    )
+    assert split_worktree("/u/src/orca") == ("/u/src/orca", None)

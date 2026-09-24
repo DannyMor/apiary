@@ -71,3 +71,15 @@ def test_live_status_by_mtime(tmp_path: Path) -> None:
     assert conn.execute("SELECT status FROM sessions WHERE id='live1'").fetchone()[0] == "live"
     index_all(conn, claude, now=p.stat().st_mtime + 3600)
     assert conn.execute("SELECT status FROM sessions WHERE id='live1'").fetchone()[0] == "idle"
+
+
+def test_worktree_session_belongs_to_parent_repo(tmp_path: Path) -> None:
+    claude = tmp_path / "projects"
+    write_transcript(
+        claude, "/u/src/orca/.claude/worktrees/review-pr-1", "w1", "Review PR 1", start=datetime.now(UTC)
+    )
+    conn = connect(tmp_path / "apiary.db")
+    index_all(conn, claude)
+    row = conn.execute("SELECT repo_path, repo_name, worktree FROM sessions WHERE id='w1'").fetchone()
+    assert (row["repo_path"], row["repo_name"], row["worktree"]) == ("/u/src/orca", "orca", "review-pr-1")
+    assert [g["id"] for g in conn.execute("SELECT id FROM groups")] == ["repo:orca"]

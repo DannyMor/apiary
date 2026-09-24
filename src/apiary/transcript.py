@@ -111,6 +111,17 @@ def _absorb(f: TranscriptFacts, rec: dict) -> None:
                         f.files_edited.add(fp)
 
 
+WORKTREES_SEGMENT = "/.claude/worktrees/"
+
+
+def split_worktree(cwd: str) -> tuple[str, str | None]:
+    """``/repo/.claude/worktrees/<name>/sub`` → ``("/repo", "<name>")``; anything else → ``(cwd, None)``."""
+    repo, sep, rest = cwd.partition(WORKTREES_SEGMENT)
+    if not sep or not rest:
+        return cwd, None
+    return repo, rest.split("/", 1)[0]
+
+
 def repo_name_from_dir(project_dir: Path) -> str:
     """``-Users-me-src-api-server`` → ``api-server`` (last path segment)."""
     return project_dir.name.rstrip("-").split("-")[-1] or project_dir.name

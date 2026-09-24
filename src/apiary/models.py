@@ -27,6 +27,7 @@ class Session(BaseModel):
     parent_id: str | None = None
     status: Status = "idle"
     transcript: str
+    worktree: str | None = None
 
 
 class SessionOut(Session):

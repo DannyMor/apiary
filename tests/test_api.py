@@ -60,3 +60,16 @@ def test_sessions_and_groups(config: Config) -> None:
 def test_root_serves_something(config: Config) -> None:
     with TestClient(create_app(config)) as client:
         assert client.get("/").status_code == 200
+
+
+def test_session_exposes_worktree(config: Config) -> None:
+    write_transcript(
+        config.paths.claude_dir,
+        "/u/src/orca/.claude/worktrees/review-pr-1",
+        "w1",
+        "Review PR 1",
+        start=datetime.now(UTC),
+    )
+    with TestClient(create_app(config)) as client:
+        s = client.get("/api/sessions/w1").json()
+        assert (s["repo_name"], s["worktree"]) == ("orca", "review-pr-1")
