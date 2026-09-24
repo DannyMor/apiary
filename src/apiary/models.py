@@ -51,6 +51,21 @@ class Group(BaseModel):
     member_ids: list[str] = Field(default_factory=list)
 
 
+class SwarmIn(BaseModel):
+    name: str = Field(min_length=1)
+    color: str | None = Field(default=None, description='OKLCH as "l c h"; suggested when omitted')
+    member_ids: list[str] = Field(default_factory=list)
+
+
+class GroupPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1)
+    color: str | None = None
+
+
+class MembersIn(BaseModel):
+    session_ids: list[str] = Field(min_length=1)
+
+
 class Health(BaseModel):
     ok: bool = True
     version: str

@@ -7,6 +7,12 @@ to the ``Hub``:
     {"type": "session.updated", "session": SessionOut}   a row was indexed, purged or flipped
     {"type": "session.live",    "id": str, "live": bool}  a session started or stopped running
     {"type": "index.progress",  "report": IndexReport}    after any run that published something
+
+The API publishes on the same hub when a person curates:
+
+    {"type": "group.updated",   "group": Group}            created, renamed, recolored, members changed
+    {"type": "group.deleted",   "id": str}                 a swarm was dissolved
+    plus session.updated for every session whose groups, tags or decision changed
 """
 
 from __future__ import annotations

@@ -87,3 +87,71 @@ def test_events_websocket_streams_index_changes(config: Config) -> None:
         assert {"type": "session.live", "id": "e1", "live": True} in seen
         updated = next(e for e in seen if e["type"] == "session.updated")
         assert (updated["session"]["id"], updated["session"]["status"]) == ("e1", "live")
+
+
+def _two_sessions(config: Config) -> None:
+    start = datetime.now(UTC) - timedelta(days=1)
+    write_transcript(config.paths.claude_dir, "/u/src/a", "s1", "one", start=start)
+    write_transcript(config.paths.claude_dir, "/u/src/b", "s2", "two", start=start)
+
+
+def test_swarm_lifecycle(config: Config) -> None:
+    _two_sessions(config)
+    with TestClient(create_app(config)) as client:
+        r = client.post("/api/groups", json={"name": "Billing", "member_ids": ["s1", "s2"]})
+        assert r.status_code == 201
+        g = r.json()
+        assert g["kind"] == "custom" and g["id"].startswith("swarm:") and g["member_ids"] == ["s1", "s2"]
+        assert g["color"] is not None
+        assert client.get("/api/sessions/s1").json()["groups"] == ["repo:a", g["id"]]
+
+        g2 = client.patch(
+            f"/api/groups/{g['id']}", json={"name": "Billing Q3", "color": "0.64 0.21 300"}
+        ).json()
+        assert (g2["name"], g2["color"]) == ("Billing Q3", "0.64 0.21 300")
+
+        assert client.delete(f"/api/groups/{g['id']}/members/s2").json()["member_ids"] == ["s1"]
+        added = client.post(f"/api/groups/{g['id']}/members", json={"session_ids": ["s2"]}).json()
+        assert added["member_ids"] == ["s1", "s2"]
+
+        assert client.delete(f"/api/groups/{g['id']}").status_code == 204
+        assert [x["id"] for x in client.get("/api/groups").json()] == ["repo:a", "repo:b"]
+        assert client.get("/api/sessions/s1").json()["groups"] == ["repo:a"]
+
+
+def test_repo_hives_are_recolorable_but_their_members_are_the_indexers(config: Config) -> None:
+    _two_sessions(config)
+    with TestClient(create_app(config)) as client:
+        assert (
+            client.patch("/api/groups/repo:a", json={"color": "0.64 0.21 300"}).json()["color"]
+            == "0.64 0.21 300"
+        )
+        assert client.post("/api/groups/repo:a/members", json={"session_ids": ["s2"]}).status_code == 409
+        assert client.delete("/api/groups/repo:a/members/s1").status_code == 409
+        assert client.delete("/api/groups/repo:a").status_code == 409
+
+
+def test_unknown_group_or_session_is_404(config: Config) -> None:
+    _two_sessions(config)
+    with TestClient(create_app(config)) as client:
+        assert client.post("/api/groups", json={"name": "x", "member_ids": ["nope"]}).status_code == 404
+        assert client.patch("/api/groups/swarm:nope", json={"name": "y"}).status_code == 404
+        assert client.get("/api/groups").json()[0]["id"] == "repo:a"
+
+
+def test_group_changes_are_pushed(config: Config) -> None:
+    _two_sessions(config)
+    with TestClient(create_app(config)) as client, client.websocket_connect("/api/events") as ws:
+        r = client.post("/api/groups", json={"name": "Billing", "member_ids": ["s1"]})
+        assert r.status_code == 201
+        g = r.json()
+        first, second = ws.receive_json(), ws.receive_json()
+        assert first == {"type": "group.updated", "group": g}
+        assert (second["type"], second["session"]["id"], second["session"]["groups"]) == (
+            "session.updated",
+            "s1",
+            ["repo:a", g["id"]],
+        )
+        client.delete(f"/api/groups/{g['id']}")
+        assert ws.receive_json() == {"type": "group.deleted", "id": g["id"]}
+        assert ws.receive_json()["session"]["groups"] == ["repo:a"]

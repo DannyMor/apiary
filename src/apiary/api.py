@@ -13,16 +13,17 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from apiary import __version__
+from apiary import __version__, curation
 from apiary.config import Config
+from apiary.curation import RepoHive, UnknownId
 from apiary.db import connect
 from apiary.indexer import IndexReport
-from apiary.models import Group, Health, SessionOut
-from apiary.queries import SESSION_SQL, fetch_session, session_out
+from apiary.models import Group, GroupPatch, Health, MembersIn, SessionOut, SwarmIn
+from apiary.queries import SESSION_SQL, fetch_group, fetch_groups, fetch_session, session_out
 from apiary.watcher import Hub, Watcher
 
 WEB_DIR = Path(__file__).resolve().parents[2] / "web"
@@ -57,6 +58,16 @@ def create_app(config: Config | None = None) -> FastAPI:
             app.state.db.close()
 
     app = FastAPI(title="Apiary", version=__version__, lifespan=lifespan)
+
+    @app.exception_handler(UnknownId)
+    async def unknown_id(_: Request, exc: UnknownId) -> JSONResponse:
+        return JSONResponse({"detail": f"no such id: {exc.args[0]}"}, status_code=404)
+
+    @app.exception_handler(RepoHive)
+    async def repo_hive(_: Request, exc: RepoHive) -> JSONResponse:
+        return JSONResponse(
+            {"detail": f"{exc.args[0]} is a repo hive; the indexer owns its members"}, status_code=409
+        )
 
     @app.get("/api/health", response_model=Health)
     async def health() -> Health:
@@ -122,23 +133,52 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     @app.get("/api/groups", response_model=list[Group])
     async def groups() -> list[Group]:
-        out = []
-        for g in app.state.db.execute("SELECT * FROM groups ORDER BY kind, name").fetchall():
-            members = [
-                r["session_id"]
-                for r in app.state.db.execute(
-                    "SELECT gm.session_id FROM group_members gm JOIN sessions s ON s.id=gm.session_id "
-                    "WHERE gm.group_id=? AND s.status != 'purged'",
-                    (g["id"],),
-                )
-            ]
-            out.append(
-                Group(id=g["id"], name=g["name"], kind=g["kind"], color=g["color"], member_ids=members)
-            )
-        return out
+        return fetch_groups(app.state.db)
+
+    @app.post("/api/groups", response_model=Group, status_code=201)
+    async def create_swarm(body: SwarmIn) -> Group:
+        group_id = curation.create_swarm(app.state.db, body.name, body.color, body.member_ids)
+        return _group_changed(app, group_id, body.member_ids)
+
+    @app.patch("/api/groups/{group_id}", response_model=Group)
+    async def update_group(group_id: str, body: GroupPatch) -> Group:
+        curation.update_group(app.state.db, group_id, body.name, body.color)
+        return _group_changed(app, group_id, [])
+
+    @app.delete("/api/groups/{group_id}", status_code=204)
+    async def delete_swarm(group_id: str) -> Response:
+        members = curation.delete_group(app.state.db, group_id)
+        app.state.hub.publish({"type": "group.deleted", "id": group_id})
+        _sessions_changed(app, members)
+        return Response(status_code=204)
+
+    @app.post("/api/groups/{group_id}/members", response_model=Group)
+    async def add_members(group_id: str, body: MembersIn) -> Group:
+        curation.add_members(app.state.db, group_id, body.session_ids)
+        return _group_changed(app, group_id, body.session_ids)
+
+    @app.delete("/api/groups/{group_id}/members/{session_id}", response_model=Group)
+    async def remove_member(group_id: str, session_id: str) -> Group:
+        curation.remove_member(app.state.db, group_id, session_id)
+        return _group_changed(app, group_id, [session_id])
 
     _mount_ui(app)
     return app
+
+
+def _group_changed(app: FastAPI, group_id: str, session_ids: list[str]) -> Group:
+    group = fetch_group(app.state.db, group_id)
+    assert group is not None
+    app.state.hub.publish({"type": "group.updated", "group": group.model_dump()})
+    _sessions_changed(app, session_ids)
+    return group
+
+
+def _sessions_changed(app: FastAPI, session_ids: list[str]) -> None:
+    for session_id in session_ids:
+        session = fetch_session(app.state.db, session_id)
+        if session:
+            app.state.hub.publish({"type": "session.updated", "session": session.model_dump()})
 
 
 async def _forward(ws: WebSocket, queue: asyncio.Queue[dict]) -> None:
