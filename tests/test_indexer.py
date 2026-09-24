@@ -129,3 +129,33 @@ def test_relocated_copy_indexes_newest_file_once(tmp_path: Path) -> None:
 
     r3 = index_all(conn, claude)
     assert (r3.indexed, r3.unchanged, r3.superseded) == (0, 1, 1)
+
+
+def test_index_version_change_reindexes_everything(tmp_path: Path) -> None:
+    claude = tmp_path / "projects"
+    now = datetime.now(UTC)
+    write_transcript(claude, "/r/a", "v1", "one", start=now - timedelta(days=1))
+    write_transcript(claude, "/r/b", "v2", "two", start=now - timedelta(days=1))
+    conn = connect(tmp_path / "apiary.db")
+    index_all(conn, claude)
+    assert index_all(conn, claude).unchanged == 2
+
+    conn.execute("UPDATE meta SET value='0' WHERE key='index_version'")
+    r = index_all(conn, claude)
+    assert (r.indexed, r.unchanged) == (2, 0)
+    assert index_all(conn, claude).unchanged == 2
+
+
+def test_reindex_moves_session_between_repo_groups(tmp_path: Path) -> None:
+    claude = tmp_path / "projects"
+    p = write_transcript(claude, "/u/src/a", "m1", "hello", start=datetime.now(UTC) - timedelta(days=1))
+    conn = connect(tmp_path / "apiary.db")
+    index_all(conn, claude)
+    assert [g["id"] for g in conn.execute("SELECT id FROM groups")] == ["repo:a"]
+
+    p.write_text(p.read_text().replace("/u/src/a", "/u/src/b"))
+    index_all(conn, claude)
+    assert [g["id"] for g in conn.execute("SELECT id FROM groups")] == ["repo:b"]
+    assert [
+        r["group_id"] for r in conn.execute("SELECT group_id FROM group_members WHERE session_id='m1'")
+    ] == ["repo:b"]

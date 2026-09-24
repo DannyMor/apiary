@@ -22,6 +22,8 @@ from apiary.scoring import score_session
 from apiary.transcript import read_transcript, repo_name_from_dir, repo_path_from_dir, split_worktree
 
 LIVE_WINDOW_SECONDS = 120.0  # a transcript written this recently counts as running
+# Bump whenever transcript parsing or row derivation changes: every file is re-read once.
+INDEX_VERSION = 2
 
 
 @dataclass
@@ -45,10 +47,11 @@ def index_all(conn: sqlite3.Connection, claude_dir: Path, now: float | None = No
         )
     }
     seen: set[str] = set()
+    reread_all = not _index_version_current(conn)
 
     for session_id, (project_dir, path, st) in _canonical_transcripts(claude_dir, report).items():
         seen.add(session_id)
-        if known.get(session_id) == (str(path), st.st_mtime, st.st_size):
+        if not reread_all and known.get(session_id) == (str(path), st.st_mtime, st.st_size):
             report.unchanged += 1
             _refresh_liveness(conn, session_id, st.st_mtime, now)
             continue
@@ -61,9 +64,22 @@ def index_all(conn: sqlite3.Connection, claude_dir: Path, now: float | None = No
             for k in gone:
                 conn.execute("UPDATE sessions SET status='purged' WHERE id=?", (k,))
         report.purged = len(gone)
+    conn.execute("DELETE FROM groups WHERE kind='repo' AND id NOT IN (SELECT group_id FROM group_members)")
 
     report.duration_s = time.perf_counter() - t0
     return report
+
+
+def _index_version_current(conn: sqlite3.Connection) -> bool:
+    row = conn.execute("SELECT value FROM meta WHERE key='index_version'").fetchone()
+    if row and int(row["value"]) == INDEX_VERSION:
+        return True
+    conn.execute(
+        "INSERT INTO meta(key, value) VALUES('index_version', ?) "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        (str(INDEX_VERSION),),
+    )
+    return False
 
 
 def _canonical_transcripts(
@@ -151,6 +167,11 @@ def _index_one(
         conn.execute(
             "INSERT INTO groups(id, name, kind) VALUES(?, ?, 'repo') ON CONFLICT(id) DO NOTHING",
             (group_id, repo_name),
+        )
+        conn.execute(
+            "DELETE FROM group_members WHERE session_id=? AND group_id != ? "
+            "AND group_id IN (SELECT id FROM groups WHERE kind='repo')",
+            (session_id, group_id),
         )
         conn.execute(
             "INSERT INTO group_members(group_id, session_id) VALUES(?, ?) ON CONFLICT DO NOTHING",
