@@ -12,7 +12,9 @@ SESSION_SQL = "SELECT s.*, sc.score, sc.reasons FROM sessions s LEFT JOIN scores
 
 def session_out(conn: sqlite3.Connection, row: sqlite3.Row) -> SessionOut:
     base = Session(**{k: row[k] for k in Session.model_fields})
-    tags = [r["tag"] for r in conn.execute("SELECT tag FROM tags WHERE session_id=?", (row["id"],))]
+    tags = [
+        r["tag"] for r in conn.execute("SELECT tag FROM tags WHERE session_id=? ORDER BY tag", (row["id"],))
+    ]
     groups = [
         r["group_id"]
         for r in conn.execute("SELECT group_id FROM group_members WHERE session_id=?", (row["id"],))

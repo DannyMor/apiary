@@ -7,6 +7,8 @@ import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from apiary.config import Config
+
 
 def iso(dt: datetime) -> str:
     return dt.astimezone(UTC).isoformat().replace("+00:00", "Z")
@@ -113,3 +115,10 @@ def _write(claude_dir: Path, cwd: str, stem: str, lines: list[dict], end: dateti
     last = (end - timedelta(minutes=3)).timestamp()
     os.utime(path, (last, last))  # Claude writes as it goes: the file is as old as its last line
     return path
+
+
+def two_sessions(config: Config) -> None:
+    """``s1`` in repo ``a`` and ``s2`` in repo ``b``, both idle since yesterday."""
+    start = datetime.now(UTC) - timedelta(days=1)
+    write_transcript(config.paths.claude_dir, "/u/src/a", "s1", "one", start=start)
+    write_transcript(config.paths.claude_dir, "/u/src/b", "s2", "two", start=start)

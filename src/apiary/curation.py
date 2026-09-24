@@ -75,6 +75,28 @@ def remove_member(conn: sqlite3.Connection, group_id: str, session_id: str) -> N
         conn.execute("DELETE FROM group_members WHERE group_id=? AND session_id=?", (group_id, session_id))
 
 
+def add_tag(conn: sqlite3.Connection, session_id: str, tag: str) -> None:
+    _require_sessions(conn, [session_id])
+    with transaction(conn):
+        conn.execute(
+            "INSERT INTO tags(session_id, tag) VALUES(?, ?) ON CONFLICT DO NOTHING", (session_id, tag)
+        )
+
+
+def remove_tag(conn: sqlite3.Connection, session_id: str, tag: str) -> None:
+    _require_sessions(conn, [session_id])
+    with transaction(conn):
+        conn.execute("DELETE FROM tags WHERE session_id=? AND tag=?", (session_id, tag))
+
+
+def tag_counts(conn: sqlite3.Connection) -> list[tuple[str, int]]:
+    rows = conn.execute(
+        "SELECT t.tag, COUNT(*) AS n FROM tags t JOIN sessions s ON s.id=t.session_id "
+        "WHERE s.status != 'purged' GROUP BY t.tag ORDER BY t.tag"
+    )
+    return [(r["tag"], r["n"]) for r in rows]
+
+
 def _require_group(conn: sqlite3.Connection, group_id: str) -> str:
     row = conn.execute("SELECT kind FROM groups WHERE id=?", (group_id,)).fetchone()
     if not row:

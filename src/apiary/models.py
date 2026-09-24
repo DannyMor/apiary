@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 Status = Literal["live", "idle", "archived", "purged"]
 
@@ -64,6 +64,20 @@ class GroupPatch(BaseModel):
 
 class MembersIn(BaseModel):
     session_ids: list[str] = Field(min_length=1)
+
+
+class TagIn(BaseModel):
+    tag: str = Field(min_length=1)
+
+    @field_validator("tag", mode="before")
+    @classmethod
+    def _strip(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+
+class TagCount(BaseModel):
+    tag: str
+    count: int
 
 
 class Health(BaseModel):

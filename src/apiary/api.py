@@ -22,7 +22,7 @@ from apiary.config import Config
 from apiary.curation import RepoHive, UnknownId
 from apiary.db import connect
 from apiary.indexer import IndexReport
-from apiary.models import Group, GroupPatch, Health, MembersIn, SessionOut, SwarmIn
+from apiary.models import Group, GroupPatch, Health, MembersIn, SessionOut, SwarmIn, TagCount, TagIn
 from apiary.queries import SESSION_SQL, fetch_group, fetch_groups, fetch_session, session_out
 from apiary.watcher import Hub, Watcher
 
@@ -162,6 +162,20 @@ def create_app(config: Config | None = None) -> FastAPI:
         curation.remove_member(app.state.db, group_id, session_id)
         return _group_changed(app, group_id, [session_id])
 
+    @app.get("/api/tags", response_model=list[TagCount])
+    async def tags() -> list[TagCount]:
+        return [TagCount(tag=tag, count=count) for tag, count in curation.tag_counts(app.state.db)]
+
+    @app.post("/api/sessions/{session_id}/tags", response_model=SessionOut)
+    async def add_tag(session_id: str, body: TagIn) -> SessionOut:
+        curation.add_tag(app.state.db, session_id, body.tag)
+        return _session_changed(app, session_id)
+
+    @app.delete("/api/sessions/{session_id}/tags/{tag}", response_model=SessionOut)
+    async def remove_tag(session_id: str, tag: str) -> SessionOut:
+        curation.remove_tag(app.state.db, session_id, tag)
+        return _session_changed(app, session_id)
+
     _mount_ui(app)
     return app
 
@@ -176,9 +190,16 @@ def _group_changed(app: FastAPI, group_id: str, session_ids: list[str]) -> Group
 
 def _sessions_changed(app: FastAPI, session_ids: list[str]) -> None:
     for session_id in session_ids:
-        session = fetch_session(app.state.db, session_id)
-        if session:
-            app.state.hub.publish({"type": "session.updated", "session": session.model_dump()})
+        if fetch_session(app.state.db, session_id):
+            _session_changed(app, session_id)
+
+
+def _session_changed(app: FastAPI, session_id: str) -> SessionOut:
+    session = fetch_session(app.state.db, session_id)
+    if session is None:
+        raise UnknownId(session_id)
+    app.state.hub.publish({"type": "session.updated", "session": session.model_dump()})
+    return session
 
 
 async def _forward(ws: WebSocket, queue: asyncio.Queue[dict]) -> None:

@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from apiary.api import create_app
 from apiary.config import Config
 
-from .fixtures import write_transcript
+from .fixtures import two_sessions, write_transcript
 
 
 def test_health(config: Config) -> None:
@@ -89,14 +89,8 @@ def test_events_websocket_streams_index_changes(config: Config) -> None:
         assert (updated["session"]["id"], updated["session"]["status"]) == ("e1", "live")
 
 
-def _two_sessions(config: Config) -> None:
-    start = datetime.now(UTC) - timedelta(days=1)
-    write_transcript(config.paths.claude_dir, "/u/src/a", "s1", "one", start=start)
-    write_transcript(config.paths.claude_dir, "/u/src/b", "s2", "two", start=start)
-
-
 def test_swarm_lifecycle(config: Config) -> None:
-    _two_sessions(config)
+    two_sessions(config)
     with TestClient(create_app(config)) as client:
         r = client.post("/api/groups", json={"name": "Billing", "member_ids": ["s1", "s2"]})
         assert r.status_code == 201
@@ -120,7 +114,7 @@ def test_swarm_lifecycle(config: Config) -> None:
 
 
 def test_repo_hives_are_recolorable_but_their_members_are_the_indexers(config: Config) -> None:
-    _two_sessions(config)
+    two_sessions(config)
     with TestClient(create_app(config)) as client:
         assert (
             client.patch("/api/groups/repo:a", json={"color": "0.64 0.21 300"}).json()["color"]
@@ -132,7 +126,7 @@ def test_repo_hives_are_recolorable_but_their_members_are_the_indexers(config: C
 
 
 def test_unknown_group_or_session_is_404(config: Config) -> None:
-    _two_sessions(config)
+    two_sessions(config)
     with TestClient(create_app(config)) as client:
         assert client.post("/api/groups", json={"name": "x", "member_ids": ["nope"]}).status_code == 404
         assert client.patch("/api/groups/swarm:nope", json={"name": "y"}).status_code == 404
@@ -140,7 +134,7 @@ def test_unknown_group_or_session_is_404(config: Config) -> None:
 
 
 def test_group_changes_are_pushed(config: Config) -> None:
-    _two_sessions(config)
+    two_sessions(config)
     with TestClient(create_app(config)) as client, client.websocket_connect("/api/events") as ws:
         r = client.post("/api/groups", json={"name": "Billing", "member_ids": ["s1"]})
         assert r.status_code == 201
