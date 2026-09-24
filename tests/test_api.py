@@ -161,3 +161,8 @@ def test_color_suggestions_avoid_existing_group_colors(config: Config) -> None:
         suggested = r.json()
         assert len(suggested) == 4 and not set(suggested) & taken
         assert client.get("/api/colors/suggest", params={"exclude": suggested[0]}).json()[0] != suggested[0]
+
+
+def test_root_answers_head_requests(config: Config) -> None:
+    with TestClient(create_app(config)) as client:
+        assert client.head("/").status_code == 200

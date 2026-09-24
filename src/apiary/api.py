@@ -266,7 +266,7 @@ def _mount_ui(app: FastAPI) -> None:
         app.mount("/", StaticFiles(directory=dist, html=True), name="ui")
     elif proto.is_file():
 
-        @app.get("/", include_in_schema=False)
+        @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
         async def prototype() -> FileResponse:
             return FileResponse(proto)
 
