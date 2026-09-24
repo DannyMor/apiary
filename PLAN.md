@@ -109,20 +109,23 @@ GET  /api/sessions/{id}                           detail, transcript head/tail
 GET  /api/groups                                  repo + custom groups
 POST /api/groups                                  {name, color, member_ids}
 PATCH /api/groups/{id}                            rename, recolor
+DELETE /api/groups/{id}                           custom groups only
 POST /api/groups/{id}/members   DELETE /api/groups/{id}/members/{sid}
 GET  /api/tags   POST /api/sessions/{id}/tags   DELETE /api/sessions/{id}/tags/{tag}
-GET  /api/colors/suggest?exclude=                 suggested OKLCH values
+GET  /api/colors/suggest?n=&exclude=              suggested OKLCH values
 
 GET  /api/policy   PUT /api/policy
 POST /api/scores/recompute
 GET  /api/gc/candidates?threshold=
 POST /api/gc/decisions                            {session_id, decision}
+DELETE /api/gc/decisions/{sid}
 POST /api/gc/apply
 POST /api/sessions/{id}/summarize
 POST /api/gc/purge
 
 POST /api/index/refresh   GET /api/index/status
-WS   /api/events                                  session.updated, session.live, index.progress
+WS   /api/events                                  session.updated, session.live, index.progress,
+                                                  group.updated, group.deleted, settings.updated
 GET  /api/settings   PUT /api/settings
 ```
 
