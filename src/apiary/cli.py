@@ -68,7 +68,7 @@ def index(config: ConfigOpt = None) -> None:
         conn.close()
     typer.echo(
         f"scanned {r.scanned}, indexed {r.indexed}, unchanged {r.unchanged}, "
-        f"purged {r.purged} in {r.duration_s:.2f}s  ({cfg.paths.claude_dir})"
+        f"superseded {r.superseded}, purged {r.purged} in {r.duration_s:.2f}s  ({cfg.paths.claude_dir})"
     )
 
 

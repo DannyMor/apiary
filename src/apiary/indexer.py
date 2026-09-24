@@ -64,7 +64,11 @@ def index_all(conn: sqlite3.Connection, claude_dir: Path, now: float | None = No
             for k in gone:
                 conn.execute("UPDATE sessions SET status='purged' WHERE id=?", (k,))
         report.purged = len(gone)
-    conn.execute("DELETE FROM groups WHERE kind='repo' AND id NOT IN (SELECT group_id FROM group_members)")
+    conn.execute(
+        """DELETE FROM groups WHERE kind='repo' AND id NOT IN (
+               SELECT gm.group_id FROM group_members gm JOIN sessions s ON s.id=gm.session_id
+               WHERE s.status != 'purged')"""
+    )
 
     report.duration_s = time.perf_counter() - t0
     return report

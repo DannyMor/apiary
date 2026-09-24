@@ -159,3 +159,14 @@ def test_reindex_moves_session_between_repo_groups(tmp_path: Path) -> None:
     assert [
         r["group_id"] for r in conn.execute("SELECT group_id FROM group_members WHERE session_id='m1'")
     ] == ["repo:b"]
+
+
+def test_repo_group_disappears_when_its_only_session_is_purged(tmp_path: Path) -> None:
+    claude = tmp_path / "projects"
+    p = write_transcript(claude, "/u/src/solo", "g1", "hi", start=datetime.now(UTC) - timedelta(days=1))
+    conn = connect(tmp_path / "apiary.db")
+    index_all(conn, claude)
+    p.unlink()
+    index_all(conn, claude)
+    assert conn.execute("SELECT status FROM sessions WHERE id='g1'").fetchone()[0] == "purged"
+    assert conn.execute("SELECT COUNT(*) FROM groups").fetchone()[0] == 0
