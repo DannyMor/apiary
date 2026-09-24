@@ -29,6 +29,7 @@ class TranscriptFacts:
     files_edited: set[str] = field(default_factory=set)
     parent_id: str | None = None
     summary: str | None = None
+    custom_title: str | None = None
 
 
 def _ts(value: object) -> float | None:
@@ -71,7 +72,9 @@ def read_transcript(path: Path) -> TranscriptFacts:
             if not isinstance(rec, dict):
                 continue
             _absorb(facts, rec)
-    if not facts.title and facts.summary:
+    if facts.custom_title:
+        facts.title = _clean_title(facts.custom_title)
+    elif not facts.title and facts.summary:
         facts.title = _clean_title(facts.summary)
     return facts
 
@@ -82,6 +85,9 @@ def _absorb(f: TranscriptFacts, rec: dict) -> None:
     f.branch = f.branch or rec.get("gitBranch") or rec.get("git_branch")
     if rec.get("type") == "summary" and isinstance(rec.get("summary"), str):
         f.summary = rec["summary"]
+        return
+    if rec.get("type") == "custom-title" and isinstance(rec.get("customTitle"), str):
+        f.custom_title = rec["customTitle"]
         return
     ts = _ts(rec.get("timestamp"))
     if ts is not None:
@@ -96,7 +102,7 @@ def _absorb(f: TranscriptFacts, rec: dict) -> None:
         return  # sub-agent traffic is not the person's conversation
     f.msg_count += 1
     content = (msg or {}).get("content")
-    if role == "user" and not f.title:
+    if role == "user" and not f.title and not rec.get("isMeta"):
         text = _text_of(content)
         if text and not text.startswith("<") and "tool_result" not in text[:40]:
             f.title = _clean_title(text)

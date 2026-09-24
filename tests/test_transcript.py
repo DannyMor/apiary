@@ -53,3 +53,24 @@ def test_split_worktree() -> None:
         "review-pr-1",
     )
     assert split_worktree("/u/src/orca") == ("/u/src/orca", None)
+
+
+def test_custom_title_wins_over_first_prompt(tmp_path: Path) -> None:
+    start = datetime(2026, 9, 1, 10, 0, tzinfo=UTC)
+    p = write_transcript(
+        tmp_path, "/r/repo", "t1", "please look at this story", start=start, custom_title="Alert lifecycle"
+    )
+    assert read_transcript(p).title == "Alert lifecycle"
+
+
+def test_meta_user_messages_are_not_titles(tmp_path: Path) -> None:
+    start = datetime(2026, 9, 1, 10, 0, tzinfo=UTC)
+    p = write_transcript(
+        tmp_path,
+        "/r/repo",
+        "t2",
+        "Review the auth PR",
+        start=start,
+        preamble="Base directory for this skill: /x/review",
+    )
+    assert read_transcript(p).title == "Review the auth PR"
