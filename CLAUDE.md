@@ -44,7 +44,7 @@ honey = the summary written when a cell is archived. The schema stays literal:
 
 ## Build order (PLAN.md has detail)
 
-1 plan ✓ · 2 skeleton ✓ · 3 prototype ✓ · 4 indexer ✓ ·
-5 watcher + live status (websocket) · 6 groups/tags/decisions in SQLite ·
+1 plan ✓ · 2 skeleton ✓ · 3 prototype ✓ · 4 indexer ✓ · 5 watcher + live status ✓ ·
+6 groups/tags/decisions in SQLite ·
 7 frontend wiring (prototype reads the API, then the React port) · 8 keeper: archive,
 summarise with `claude -p`, purge.

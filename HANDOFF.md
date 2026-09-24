@@ -1,14 +1,14 @@
-# Handoff — where Apiary stands (24 Sep 2026, evening)
+# Handoff — where Apiary stands (24 Sep 2026, night)
 
 ## Repo
 
 `~/mydev/apiary`, branch `main`, remote `https://github.com/DannyMor/apiary.git` (personal
 account; CLAUDE.md has the account rules). Author on every commit is
 `Danny Mor <19153512+DannyMor@users.noreply.github.com>`. `git log` tells the story: plan,
-skeleton, prototype, indexer, guidance, then the indexer fixes below.
+skeleton, prototype, indexer, guidance, the indexer fixes, then stage 5 (watcher + events).
 
 `uv sync && uv run pytest -q && uv run ruff check . && uv run ruff format --check .` all pass
-(23 tests). Python 3.12.12 via uv.
+(28 tests). Python 3.12.12 via uv.
 
 ## What exists
 
@@ -17,10 +17,14 @@ skeleton, prototype, indexer, guidance, then the indexer fixes below.
   `db.py` (schema v2, migrated in place), `models.py`, `transcript.py` (defensive JSONL
   reader), `scoring.py` (rule-based keep-score 0–100 with reasons), `indexer.py`
   (incremental, one file per session, forks, relocations, purge, repo groups, scores),
-  `api.py` (`/api/health`, `/api/sessions` with sort/group/status, `/api/sessions/{id}`,
-  `/api/groups`, `/api/index/refresh|status`, serves the UI at `/`), `cli.py`.
-- `tests/`: 23 tests built from the real transcript shapes (`tests/fixtures.py` writes
-  plain, forked, preambled and custom-titled transcripts).
+  `queries.py` (one session shape for the API and the event stream), `watcher.py` (`Hub`,
+  `Watcher`: re-index on file events and on a 30s tick, publish events), `api.py`
+  (`/api/health`, `/api/sessions` with sort/group/status, `/api/sessions/{id}`,
+  `/api/groups`, `/api/index/refresh|status`, `WS /api/events`, serves the UI at `/`),
+  `cli.py`.
+- `tests/`: 28 tests built from the real transcript shapes (`tests/fixtures.py` writes
+  plain, forked, preambled and custom-titled transcripts). `tests/test_watcher.py` drives a
+  real `watchfiles` watcher on a temp dir; `test_api.py` reads the websocket.
 - `web/prototype/apiary.html`: the complete UI prototype on mock data.
 
 ## How the indexer models a session (verified against `~/.claude/projects`, 24 Sep 2026)
@@ -52,6 +56,27 @@ Record types seen and ignored on purpose: `attachment`, `queue-operation`, `last
 results (they are `user` records), so it overstates conversation length; `agent-name`
 (`agentName`) could be a title fallback for named agent sessions. Neither is urgent.
 
+## Stage 5: live status over a websocket (done 24 Sep 2026)
+
+`WS /api/events` sends JSON events, in this order per index run:
+
+    {"type": "session.updated", "session": <SessionOut>}   indexed, purged or live/idle flipped
+    {"type": "session.live",    "id": "<id>", "live": true|false}
+    {"type": "index.progress",  "report": <IndexReport>}    only after a run that published
+
+The `Watcher` runs on the app's event loop: `watchfiles.awatch` on `claude_dir` (2s debounce)
+and a 30s tick, because a live session turns idle through silence that no file event
+announces (`LIVE_WINDOW_SECONDS = 120`). `POST /api/index/refresh` runs the same
+`run_once`, so its changes reach subscribers too. `IndexReport.changed` lists the ids a run
+indexed or purged.
+
+Verified against the real server: `uv run apiary serve`, a websocket client connected, and
+118s later the running Claude Code session went silent past the window: `session.updated`
+(status idle), `session.live false`, `index.progress` arrived in that order; shutdown clean.
+
+Known cost: a live transcript is re-read whole on every debounce (a 20 MB file takes ~100 ms).
+If that ever matters, parse from a stored byte offset instead.
+
 ## Decisions already made (don't reopen without reason)
 
 - White world, camera-relative everything, no fog; unlit floor with a shadow layer.
@@ -63,5 +88,7 @@ results (they are `user` records), so it overstates conversation length; `agent-
 
 ## Next
 
-Stage 5: `watcher.py` with `watchfiles`, `WS /api/events`, live status pushed to the UI;
-then stage 6 moves swarms, tags and keeper decisions from browser storage into SQLite.
+Stage 6: swarms (custom groups), tags and keeper decisions persisted in SQLite instead of
+the browser: `POST/PATCH /api/groups`, group members, `/api/tags`, `/api/gc/decisions`
+(PLAN.md has the API list). Then stage 7 wires the prototype to `/api/sessions` and
+`/api/events`, and the React port begins.
