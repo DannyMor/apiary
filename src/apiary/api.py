@@ -7,7 +7,6 @@ the event loop thread.
 
 from __future__ import annotations
 
-import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
@@ -20,7 +19,8 @@ from apiary import __version__
 from apiary.config import Config
 from apiary.db import connect
 from apiary.indexer import IndexReport, index_all
-from apiary.models import Group, Health, Session, SessionOut
+from apiary.models import Group, Health, SessionOut
+from apiary.queries import SESSION_SQL, fetch_session, session_out
 
 WEB_DIR = Path(__file__).resolve().parents[2] / "web"
 
@@ -86,23 +86,17 @@ def create_app(config: Config | None = None) -> FastAPI:
         else:
             where.append("s.status != 'purged'")
         rows = app.state.db.execute(
-            f"""SELECT s.*, sc.score, sc.reasons FROM sessions s
-                LEFT JOIN scores sc ON sc.session_id = s.id
-                WHERE {" AND ".join(where)} ORDER BY {SORTS[sort]} LIMIT ?""",
+            f"""{SESSION_SQL} WHERE {" AND ".join(where)} ORDER BY {SORTS[sort]} LIMIT ?""",
             [*args, limit],
         ).fetchall()
-        return [_session_out(app, r) for r in rows]
+        return [session_out(app.state.db, r) for r in rows]
 
     @app.get("/api/sessions/{session_id}", response_model=SessionOut)
     async def session(session_id: str) -> SessionOut:
-        row = app.state.db.execute(
-            "SELECT s.*, sc.score, sc.reasons FROM sessions s "
-            "LEFT JOIN scores sc ON sc.session_id=s.id WHERE s.id=?",
-            (session_id,),
-        ).fetchone()
-        if not row:
+        found = fetch_session(app.state.db, session_id)
+        if found is None:
             raise HTTPException(404, "no such session")
-        return _session_out(app, row)
+        return found
 
     @app.get("/api/groups", response_model=list[Group])
     async def groups() -> list[Group]:
@@ -123,22 +117,6 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     _mount_ui(app)
     return app
-
-
-def _session_out(app: FastAPI, row) -> SessionOut:
-    base = Session(**{k: row[k] for k in Session.model_fields})
-    tags = [r["tag"] for r in app.state.db.execute("SELECT tag FROM tags WHERE session_id=?", (row["id"],))]
-    groups = [
-        r["group_id"]
-        for r in app.state.db.execute("SELECT group_id FROM group_members WHERE session_id=?", (row["id"],))
-    ]
-    return SessionOut(
-        **base.model_dump(),
-        score=row["score"] if row["score"] is not None else 0,
-        reasons=json.loads(row["reasons"]) if row["reasons"] else [],
-        tags=tags,
-        groups=groups,
-    )
 
 
 def _mount_ui(app: FastAPI) -> None:
