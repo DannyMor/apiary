@@ -6,10 +6,11 @@
 account; CLAUDE.md has the account rules). Author on every commit is
 `Danny Mor <19153512+DannyMor@users.noreply.github.com>`. `git log` tells the story: plan,
 skeleton, prototype, indexer, guidance, the indexer fixes, stage 5 (watcher + events), stage 6
-(swarms, tags, decisions, settings, colors).
+(swarms, tags, decisions, settings, colors), stage 7 part one (the prototype runs on the API).
 
 `uv sync && uv run pytest -q && uv run ruff check . && uv run ruff format --check .` all pass
-(43 tests). Python 3.12.12 via uv.
+(44 tests). Python 3.12.12 via uv. `uv run apiary serve` then open http://127.0.0.1:7431;
+`.claude/launch.json` starts the same for the in-app browser.
 
 ## What exists
 
@@ -27,7 +28,8 @@ skeleton, prototype, indexer, guidance, the indexer fixes, stage 5 (watcher + ev
 - `tests/`: 43 tests built from the real transcript shapes (`tests/fixtures.py` writes
   plain, forked, preambled and custom-titled transcripts). `tests/test_watcher.py` drives a
   real `watchfiles` watcher on a temp dir; the API tests read the websocket.
-- `web/prototype/apiary.html`: the complete UI prototype on mock data.
+- `web/prototype/apiary.html`: the complete UI, live on the daemon's data since stage 7
+  (see its README for the rules). No test harness: it is verified in the browser.
 
 ## How the indexer models a session (verified against `~/.claude/projects`, 24 Sep 2026)
 
@@ -104,6 +106,31 @@ members or deleting a hive are 409. Repo hives are colored by the indexer on cre
 
 Applying `archive` / `summarize_archive` decisions is stage 8; a decision is only recorded.
 
+## Stage 7, part one: the prototype runs on the daemon (done 25 Sep 2026)
+
+Mock data, client-side scoring and `localStorage` are gone from `web/prototype/apiary.html`.
+An `api` section loads `/api/sessions?limit=5000`, `/api/groups`, `/api/settings`, maps the
+API shape to the prototype's (`sessionFromApi`: seconds → ms, `status === 'live'` → `active`,
+the `repo:` group → home hive, `swarm:` groups → `swarms`, tags and decisions mirrored into
+`state.tags` / `state.decisions`), subscribes to `/api/events` and applies every event with an
+80 ms debounced `rebuildScene() + renderTray()` (`redrawSoon`). Every former `save()` site
+calls the matching endpoint and then refreshes the sessions involved; errors surface as a
+toast. Settings writes are debounced 300 ms and merged. A dot at the bottom right shows the
+websocket state and reconnects with backoff.
+
+Verified in the in-app browser against the real daemon: create a swarm from a selection,
+recolor, add and remove a tag, keep / archive / undo in the keeper, world color and section
+collapse, a full reload restoring all of it from the server, and swarm create/delete driven
+from the API showing up live. Console clean after two fixes: a session refreshed by a write
+keeps its layout fields (`displayGroup`, `pos`, `slot`) until the next rebuild, and label,
+minimap and focus code skip groups that have no layout center yet.
+
+Rules the UI now follows: a cell in several swarms is drawn in the first swarm (hives first,
+then swarms by name) and ghosted in its home hive; a swarm's tray section lists every
+member; hives can be renamed and recolored but not dissolved or edited; keeper buttons only
+record a decision (`marked: archive`, with Undo) because applying is stage 8; the row meta
+shows the worktree name when there is one.
+
 ## Decisions already made (don't reopen without reason)
 
 - White world, camera-relative everything, no fog; unlit floor with a shadow layer.
@@ -115,8 +142,8 @@ Applying `archive` / `summarize_archive` decisions is stage 8; a decision is onl
 
 ## Next
 
-Stage 7: frontend wiring. First make `web/prototype/apiary.html` read `/api/sessions`,
-`/api/groups`, `/api/settings`, subscribe to `/api/events`, and write through the stage 6
-endpoints instead of `localStorage` (mock data and `save()`/`load()` go away). Then start the
-React + TypeScript + Vite + react-three-fiber port under `web/`, one module at a time,
-built to `web/dist/` which `api.py` already serves when present.
+Stage 7, part two: the React + TypeScript + Vite + react-three-fiber port under `web/`, one
+module at a time (api client from the OpenAPI schema, store, tray, world, keeper), built to
+`web/dist/` which `api.py` already serves when present; the prototype stays the reference.
+Stage 8: the keeper applies decisions (archive moves the transcript into `archive_dir`,
+summarize writes honey with `claude -p`, purge), `POST /api/gc/apply`, restore.

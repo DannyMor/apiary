@@ -135,6 +135,7 @@ Stage 3 ships the single-file prototype (`web/prototype/apiary.html`, plain
 three.js) served by the daemon. It establishes the visual language and every
 interaction: recency/score height lenses, click-to-focus camera, tray with
 group-by / order-by / filters, labels, custom groups, the GC flow, world color.
+Since stage 7 it runs on the API and the websocket instead of mock data.
 
 The production UI will be React + TypeScript + Vite with react-three-fiber and
 Zustand, built to `web/dist/` and served by the same daemon. It ports the
