@@ -48,11 +48,11 @@ def test_dir_decoding() -> None:
 
 
 def test_split_worktree() -> None:
-    assert split_worktree("/u/src/orca/.claude/worktrees/review-pr-1/services/x") == (
-        "/u/src/orca",
+    assert split_worktree("/u/src/hive/.claude/worktrees/review-pr-1/services/x") == (
+        "/u/src/hive",
         "review-pr-1",
     )
-    assert split_worktree("/u/src/orca") == ("/u/src/orca", None)
+    assert split_worktree("/u/src/hive") == ("/u/src/hive", None)
 
 
 def test_custom_title_wins_over_first_prompt(tmp_path: Path) -> None:
