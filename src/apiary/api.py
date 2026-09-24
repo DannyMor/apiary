@@ -11,7 +11,7 @@ import asyncio
 import contextlib
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
@@ -200,6 +200,16 @@ def create_app(config: Config | None = None) -> FastAPI:
     async def undecide(session_id: str) -> SessionOut:
         curation.clear_decision(app.state.db, session_id)
         return _session_changed(app, session_id)
+
+    @app.get("/api/settings")
+    async def settings() -> dict[str, Any]:
+        return curation.get_settings(app.state.db)
+
+    @app.put("/api/settings")
+    async def put_settings(body: dict[str, Any]) -> dict[str, Any]:
+        merged = curation.put_settings(app.state.db, body)
+        app.state.hub.publish({"type": "settings.updated", "settings": merged})
+        return merged
 
     _mount_ui(app)
     return app

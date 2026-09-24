@@ -6,9 +6,11 @@ deleted, but they can be renamed and recolored.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import time
 import uuid
+from typing import Any
 
 from apiary.colors import suggest
 from apiary.db import transaction
@@ -125,6 +127,27 @@ def candidate_ids(conn: sqlite3.Connection, threshold: int) -> list[str]:
         (threshold,),
     )
     return [r["id"] for r in rows]
+
+
+def get_settings(conn: sqlite3.Connection) -> dict[str, Any]:
+    return {
+        r["key"]: json.loads(r["value"]) for r in conn.execute("SELECT key, value FROM settings ORDER BY key")
+    }
+
+
+def put_settings(conn: sqlite3.Connection, patch: dict[str, Any]) -> dict[str, Any]:
+    """Merge ``patch`` into the stored settings; a ``None`` value removes the key."""
+    with transaction(conn):
+        for key, value in patch.items():
+            if value is None:
+                conn.execute("DELETE FROM settings WHERE key=?", (key,))
+            else:
+                conn.execute(
+                    "INSERT INTO settings(key, value) VALUES(?, ?) "
+                    "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    (key, json.dumps(value)),
+                )
+    return get_settings(conn)
 
 
 def _require_group(conn: sqlite3.Connection, group_id: str) -> str:

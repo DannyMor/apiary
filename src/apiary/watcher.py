@@ -12,6 +12,7 @@ The API publishes on the same hub when a person curates:
 
     {"type": "group.updated",   "group": Group}            created, renamed, recolored, members changed
     {"type": "group.deleted",   "id": str}                 a swarm was dissolved
+    {"type": "settings.updated", "settings": dict}         the merged settings after a PUT
     plus session.updated for every session whose groups, tags or decision changed
 """
 
