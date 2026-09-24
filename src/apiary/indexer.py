@@ -73,9 +73,16 @@ def index_all(conn: sqlite3.Connection, claude_dir: Path, now: float | None = No
                SELECT gm.group_id FROM group_members gm JOIN sessions s ON s.id=gm.session_id
                WHERE s.status != 'purged')"""
     )
+    _color_uncolored_groups(conn)
 
     report.duration_s = time.perf_counter() - t0
     return report
+
+
+def _color_uncolored_groups(conn: sqlite3.Connection) -> None:
+    for row in conn.execute("SELECT id FROM groups WHERE color IS NULL ORDER BY id").fetchall():
+        taken = [r["color"] for r in conn.execute("SELECT color FROM groups WHERE color IS NOT NULL")]
+        conn.execute("UPDATE groups SET color=? WHERE id=?", (suggest(taken, 1)[0], row["id"]))
 
 
 def _index_version_current(conn: sqlite3.Connection) -> bool:

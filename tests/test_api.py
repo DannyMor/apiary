@@ -149,3 +149,15 @@ def test_group_changes_are_pushed(config: Config) -> None:
         client.delete(f"/api/groups/{g['id']}")
         assert ws.receive_json() == {"type": "group.deleted", "id": g["id"]}
         assert ws.receive_json()["session"]["groups"] == ["repo:a"]
+
+
+def test_color_suggestions_avoid_existing_group_colors(config: Config) -> None:
+    two_sessions(config)
+    with TestClient(create_app(config)) as client:
+        taken = {g["color"] for g in client.get("/api/groups").json()}
+        assert len(taken) == 2
+        r = client.get("/api/colors/suggest", params={"n": 4})
+        assert r.status_code == 200
+        suggested = r.json()
+        assert len(suggested) == 4 and not set(suggested) & taken
+        assert client.get("/api/colors/suggest", params={"exclude": suggested[0]}).json()[0] != suggested[0]

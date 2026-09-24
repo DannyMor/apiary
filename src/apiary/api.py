@@ -11,13 +11,13 @@ import asyncio
 import contextlib
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from apiary import __version__, curation
+from apiary import __version__, colors, curation
 from apiary.config import Config
 from apiary.curation import RepoHive, UnknownId
 from apiary.db import connect
@@ -171,6 +171,16 @@ def create_app(config: Config | None = None) -> FastAPI:
     async def remove_member(group_id: str, session_id: str) -> Group:
         curation.remove_member(app.state.db, group_id, session_id)
         return _group_changed(app, group_id, [session_id])
+
+    @app.get("/api/colors/suggest", response_model=list[str])
+    async def suggest_colors(
+        n: Annotated[int, Query(ge=1, le=12)] = 4,
+        exclude: Annotated[
+            list[str] | None, Query(description='extra "l c h" colors to steer clear of')
+        ] = None,
+    ) -> list[str]:
+        taken = [g.color for g in fetch_groups(app.state.db) if g.color]
+        return colors.suggest([*taken, *(exclude or [])], n)
 
     @app.get("/api/tags", response_model=list[TagCount])
     async def tags() -> list[TagCount]:

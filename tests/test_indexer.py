@@ -200,3 +200,13 @@ def test_new_repo_hives_get_distinct_colors(tmp_path: Path) -> None:
     assert colors["repo:b"] is not None and colors["repo:b"] != colors["repo:a"]
     index_all(conn, claude)
     assert {g["id"]: g["color"] for g in conn.execute("SELECT id, color FROM groups")} == colors
+
+
+def test_uncolored_repo_hives_get_a_color_on_the_next_index(tmp_path: Path) -> None:
+    claude = tmp_path / "projects"
+    write_transcript(claude, "/u/src/a", "a1", "one", start=datetime.now(UTC) - timedelta(days=1))
+    conn = connect(tmp_path / "apiary.db")
+    index_all(conn, claude)
+    conn.execute("UPDATE groups SET color=NULL")
+    index_all(conn, claude)
+    assert conn.execute("SELECT color FROM groups WHERE id='repo:a'").fetchone()[0] == "0.64 0.21 22"
