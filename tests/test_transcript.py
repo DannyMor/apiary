@@ -1,9 +1,9 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from apiary.transcript import read_transcript, repo_name_from_dir, repo_path_from_dir, split_worktree
 
-from .fixtures import write_transcript
+from .fixtures import write_fork, write_transcript
 
 
 def test_reads_facts(tmp_path: Path) -> None:
@@ -18,7 +18,7 @@ def test_reads_facts(tmp_path: Path) -> None:
     assert f.title == "Refactor auth middleware"
     assert f.msg_count == 6
     assert f.tool_calls == 2
-    assert f.files_edited == {"/src/f2.py", "/src/f1.py"}
+    assert f.files_edited == {"/src/abc-f2.py", "/src/abc-f1.py"}
     assert f.first_ts == start.timestamp()
     assert f.last_ts == start.timestamp() + 5 * 180
 
@@ -74,3 +74,22 @@ def test_meta_user_messages_are_not_titles(tmp_path: Path) -> None:
         preamble="Base directory for this skill: /x/review",
     )
     assert read_transcript(p).title == "Review the auth PR"
+
+
+def test_fork_file_counts_only_its_own_records(tmp_path: Path) -> None:
+    start = datetime(2026, 9, 1, 10, 0, tzinfo=UTC)
+    p = write_fork(
+        tmp_path, "/r/repo", [("parent", "parent prompt", 2, 1), ("child", "child prompt", 4, 2)], start=start
+    )
+    f = read_transcript(p)
+    assert f.parent_id == "parent"
+    assert f.title == "child prompt"
+    assert f.msg_count == 4
+    assert f.files_edited == {"/src/child-f2.py", "/src/child-f1.py"}
+    assert f.first_ts == (start + timedelta(minutes=6)).timestamp()
+
+
+def test_fork_of_fork_parent_is_nearest(tmp_path: Path) -> None:
+    start = datetime(2026, 9, 1, 10, 0, tzinfo=UTC)
+    p = write_fork(tmp_path, "/r/repo", [("a", "a", 2, 0), ("b", "b", 2, 0), ("c", "c", 2, 0)], start=start)
+    assert read_transcript(p).parent_id == "b"

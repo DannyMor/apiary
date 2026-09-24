@@ -1,14 +1,16 @@
 """Index Claude Code transcripts into SQLite.
 
-``index_all`` walks ``claude_dir``, stats every ``*.jsonl``, and re-reads only the
-files whose mtime or size changed since they were last indexed. Sessions whose
-transcript disappeared are marked ``purged``. Repo groups are created for every
-project directory seen. Scores are recomputed for anything touched.
+``index_all`` walks ``claude_dir``, stats every ``*.jsonl``, keeps one file per session
+(the newest, when a relocated session left a frozen copy behind), and re-reads only the
+files whose path, mtime or size changed since they were last indexed. Sessions whose
+transcript disappeared are marked ``purged``. Repo groups are created for every repo
+seen. Scores are recomputed for anything touched.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import time
 from dataclasses import dataclass
@@ -27,6 +29,7 @@ class IndexReport:
     scanned: int = 0
     indexed: int = 0
     unchanged: int = 0
+    superseded: int = 0
     purged: int = 0
     duration_s: float = 0.0
 
@@ -36,41 +39,63 @@ def index_all(conn: sqlite3.Connection, claude_dir: Path, now: float | None = No
     t0 = time.perf_counter()
     report = IndexReport()
     known = {
-        row["transcript"]: (row["mtime"], row["size_bytes"])
-        for row in conn.execute("SELECT transcript, mtime, size_bytes FROM sessions WHERE status != 'purged'")
+        row["id"]: (row["transcript"], row["mtime"], row["size_bytes"])
+        for row in conn.execute(
+            "SELECT id, transcript, mtime, size_bytes FROM sessions WHERE status != 'purged'"
+        )
     }
     seen: set[str] = set()
 
-    if claude_dir.is_dir():
-        for project_dir in sorted(p for p in claude_dir.iterdir() if p.is_dir()):
-            for path in sorted(project_dir.glob("*.jsonl")):
-                report.scanned += 1
-                key = str(path)
-                seen.add(key)
-                st = path.stat()
-                if known.get(key) == (st.st_mtime, st.st_size):
-                    report.unchanged += 1
-                    _refresh_liveness(conn, key, st.st_mtime, now)
-                    continue
-                _index_one(conn, project_dir, path, st.st_mtime, st.st_size, now)
-                report.indexed += 1
+    for session_id, (project_dir, path, st) in _canonical_transcripts(claude_dir, report).items():
+        seen.add(session_id)
+        if known.get(session_id) == (str(path), st.st_mtime, st.st_size):
+            report.unchanged += 1
+            _refresh_liveness(conn, session_id, st.st_mtime, now)
+            continue
+        _index_one(conn, project_dir, path, st.st_mtime, st.st_size, now)
+        report.indexed += 1
 
     gone = [k for k in known if k not in seen]
     if gone:
         with transaction(conn):
             for k in gone:
-                conn.execute("UPDATE sessions SET status='purged' WHERE transcript=?", (k,))
+                conn.execute("UPDATE sessions SET status='purged' WHERE id=?", (k,))
         report.purged = len(gone)
 
     report.duration_s = time.perf_counter() - t0
     return report
 
 
-def _refresh_liveness(conn: sqlite3.Connection, transcript: str, mtime: float, now: float) -> None:
+def _canonical_transcripts(
+    claude_dir: Path, report: IndexReport
+) -> dict[str, tuple[Path, Path, os.stat_result]]:
+    """One ``(project_dir, path, stat)`` per session id (the file stem).
+
+    When a session relocates to another cwd, Claude Code copies the transcript into the new
+    project dir under the same name and keeps writing there; the old file stays frozen. The
+    most recently written file is therefore the session.
+    """
+    best: dict[str, tuple[Path, Path, os.stat_result]] = {}
+    if not claude_dir.is_dir():
+        return best
+    for project_dir in sorted(p for p in claude_dir.iterdir() if p.is_dir()):
+        for path in sorted(project_dir.glob("*.jsonl")):
+            report.scanned += 1
+            st = path.stat()
+            current = best.get(path.stem)
+            if current is not None:
+                report.superseded += 1
+                if (st.st_mtime, st.st_size) <= (current[2].st_mtime, current[2].st_size):
+                    continue
+            best[path.stem] = (project_dir, path, st)
+    return best
+
+
+def _refresh_liveness(conn: sqlite3.Connection, session_id: str, mtime: float, now: float) -> None:
     status = "live" if now - mtime < LIVE_WINDOW_SECONDS else "idle"
     conn.execute(
-        "UPDATE sessions SET status=? WHERE transcript=? AND status IN ('live','idle') AND status != ?",
-        (status, transcript, status),
+        "UPDATE sessions SET status=? WHERE id=? AND status IN ('live','idle') AND status != ?",
+        (status, session_id, status),
     )
 
 
@@ -78,7 +103,7 @@ def _index_one(
     conn: sqlite3.Connection, project_dir: Path, path: Path, mtime: float, size: int, now: float
 ) -> None:
     facts = read_transcript(path)
-    session_id = facts.session_id or path.stem
+    session_id = path.stem
     repo_path, worktree = split_worktree(facts.cwd) if facts.cwd else (repo_path_from_dir(project_dir), None)
     repo_name = Path(repo_path).name or repo_name_from_dir(project_dir)
     last = facts.last_ts or mtime

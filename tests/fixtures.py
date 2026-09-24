@@ -31,15 +31,11 @@ def write_transcript(
     ``preamble`` is injected as an ``isMeta`` user message before the first turn, the way
     skill preambles appear; ``custom_title`` adds a ``custom-title`` record.
     """
-    project_dir = claude_dir / cwd.replace("/", "-")
-    project_dir.mkdir(parents=True, exist_ok=True)
-    path = project_dir / f"{session_id}.jsonl"
     lines: list[dict] = []
     if summary:
         lines.append({"type": "summary", "summary": summary, "leafUuid": "x"})
     if custom_title:
         lines.append({"type": "custom-title", "customTitle": custom_title, "sessionId": session_id})
-    t = start
     if preamble:
         lines.append(
             {
@@ -48,11 +44,40 @@ def write_transcript(
                 "sessionId": session_id,
                 "cwd": cwd,
                 "gitBranch": branch,
-                "timestamp": iso(t),
+                "timestamp": iso(start),
                 "uuid": f"{session_id}-meta",
                 "message": {"role": "user", "content": [{"type": "text", "text": preamble}]},
             }
         )
+    turn_lines, end = _turns(session_id, cwd, branch, first_user, turns, edits, start)
+    return _write(claude_dir, cwd, session_id, lines + turn_lines, end)
+
+
+def write_fork(
+    claude_dir: Path,
+    cwd: str,
+    chain: list[tuple[str, str, int, int]],
+    *,
+    start: datetime,
+    branch: str = "main",
+) -> Path:
+    """Write a forked transcript the way Claude Code does: the ancestors' records copied first,
+    each carrying its own ``sessionId``, then the fork's own records. ``chain`` is
+    ``[(session_id, first_user, turns, edits), ...]`` from the root ancestor to the fork
+    itself; the file is named after the last id.
+    """
+    lines: list[dict] = []
+    t = start
+    for session_id, first_user, turns, edits in chain:
+        seg, t = _turns(session_id, cwd, branch, first_user, turns, edits, t)
+        lines += seg
+    return _write(claude_dir, cwd, chain[-1][0], lines, t)
+
+
+def _turns(
+    session_id: str, cwd: str, branch: str, first_user: str, turns: int, edits: int, t: datetime
+) -> tuple[list[dict], datetime]:
+    lines: list[dict] = []
     for i in range(turns):
         role = "user" if i % 2 == 0 else "assistant"
         content: list[dict] = [{"type": "text", "text": first_user if i == 0 else f"turn {i}"}]
@@ -61,7 +86,7 @@ def write_transcript(
                 {
                     "type": "tool_use",
                     "name": "Edit",
-                    "input": {"file_path": f"/src/f{edits}.py", "old_string": "a"},
+                    "input": {"file_path": f"/src/{session_id}-f{edits}.py", "old_string": "a"},
                 }
             )
             edits -= 1
@@ -77,7 +102,14 @@ def write_transcript(
             }
         )
         t += timedelta(minutes=3)
+    return lines, t
+
+
+def _write(claude_dir: Path, cwd: str, stem: str, lines: list[dict], end: datetime) -> Path:
+    project_dir = claude_dir / cwd.replace("/", "-")
+    project_dir.mkdir(parents=True, exist_ok=True)
+    path = project_dir / f"{stem}.jsonl"
     path.write_text("\n".join(json.dumps(x) for x in lines) + "\n")
-    last = (t - timedelta(minutes=3)).timestamp()
+    last = (end - timedelta(minutes=3)).timestamp()
     os.utime(path, (last, last))  # Claude writes as it goes: the file is as old as its last line
     return path

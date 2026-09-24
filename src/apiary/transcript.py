@@ -59,7 +59,13 @@ def _clean_title(text: str) -> str:
 
 
 def read_transcript(path: Path) -> TranscriptFacts:
-    facts = TranscriptFacts()
+    """The file is named after its session. A fork starts with the ancestors' records copied
+    verbatim, each still carrying the ancestor's ``sessionId``; those only decide ``parent_id``
+    (the nearest ancestor) and are not counted as this session's conversation.
+    """
+    own_id = path.stem
+    facts = TranscriptFacts(session_id=own_id)
+    saw_own = False
     with path.open("r", encoding="utf-8", errors="replace") as fh:
         for raw in fh:
             raw = raw.strip()
@@ -71,6 +77,12 @@ def read_transcript(path: Path) -> TranscriptFacts:
                 continue
             if not isinstance(rec, dict):
                 continue
+            sid = rec.get("sessionId") or rec.get("session_id")
+            if isinstance(sid, str) and sid != own_id:
+                if not saw_own:
+                    facts.parent_id = sid
+                continue
+            saw_own = saw_own or sid == own_id
             _absorb(facts, rec)
     if facts.custom_title:
         facts.title = _clean_title(facts.custom_title)
@@ -80,7 +92,6 @@ def read_transcript(path: Path) -> TranscriptFacts:
 
 
 def _absorb(f: TranscriptFacts, rec: dict) -> None:
-    f.session_id = f.session_id or rec.get("sessionId") or rec.get("session_id")
     f.cwd = f.cwd or rec.get("cwd")
     f.branch = f.branch or rec.get("gitBranch") or rec.get("git_branch")
     if rec.get("type") == "summary" and isinstance(rec.get("summary"), str):

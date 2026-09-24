@@ -10,7 +10,11 @@ Status = Literal["live", "idle", "archived", "purged"]
 
 
 class Session(BaseModel):
-    """A session as stored: one row of the ``sessions`` table."""
+    """A session as stored: one row of the ``sessions`` table.
+
+    ``id`` is the transcript's file stem, the session id Claude Code named the file by.
+    ``parent_id`` is the session this one was forked from.
+    """
 
     id: str
     repo_path: str

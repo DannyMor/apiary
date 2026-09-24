@@ -5,7 +5,7 @@ from pathlib import Path
 from apiary.db import connect
 from apiary.indexer import index_all
 
-from .fixtures import write_transcript
+from .fixtures import write_fork, write_transcript
 
 
 def test_index_round_trip(tmp_path: Path) -> None:
@@ -83,3 +83,49 @@ def test_worktree_session_belongs_to_parent_repo(tmp_path: Path) -> None:
     row = conn.execute("SELECT repo_path, repo_name, worktree FROM sessions WHERE id='w1'").fetchone()
     assert (row["repo_path"], row["repo_name"], row["worktree"]) == ("/u/src/orca", "orca", "review-pr-1")
     assert [g["id"] for g in conn.execute("SELECT id FROM groups")] == ["repo:orca"]
+
+
+def test_fork_gets_own_row_with_parent(tmp_path: Path) -> None:
+    claude = tmp_path / "projects"
+    now = datetime.now(UTC)
+    write_transcript(
+        claude, "/r/repo", "p1", "parent prompt", start=now - timedelta(days=2), turns=6, edits=3
+    )
+    write_fork(
+        claude,
+        "/r/repo",
+        [("p1", "parent prompt", 6, 3), ("c1", "try another way", 4, 1)],
+        start=now - timedelta(days=2),
+    )
+    conn = connect(tmp_path / "apiary.db")
+    index_all(conn, claude)
+    rows = {r["id"]: dict(r) for r in conn.execute("SELECT * FROM sessions")}
+    assert set(rows) == {"p1", "c1"}
+    assert rows["c1"]["parent_id"] == "p1"
+    assert rows["p1"]["parent_id"] is None
+    assert (rows["c1"]["msg_count"], rows["c1"]["files_edited"]) == (4, 1)
+    reasons = conn.execute("SELECT reasons FROM scores WHERE session_id='c1'").fetchone()[0]
+    assert "fork with no divergence" in reasons
+    r2 = index_all(conn, claude)
+    assert (r2.indexed, r2.unchanged) == (0, 2)
+
+
+def test_relocated_copy_indexes_newest_file_once(tmp_path: Path) -> None:
+    claude = tmp_path / "projects"
+    now = datetime.now(UTC)
+    old = write_transcript(claude, "/u/src/a", "r1", "start here", start=now - timedelta(days=2), turns=2)
+    conn = connect(tmp_path / "apiary.db")
+    index_all(conn, claude)
+    assert conn.execute("SELECT msg_count FROM sessions WHERE id='r1'").fetchone()[0] == 2
+
+    new = write_transcript(
+        claude, "/u/src/a/.claude/worktrees/w", "r1", "start here", start=now - timedelta(days=1), turns=6
+    )
+    r = index_all(conn, claude)
+    assert (r.scanned, r.indexed, r.superseded, r.purged) == (2, 1, 1, 0)
+    row = conn.execute("SELECT msg_count, transcript, status FROM sessions WHERE id='r1'").fetchone()
+    assert (row["msg_count"], row["transcript"], row["status"]) == (6, str(new), "idle")
+    assert old.exists()
+
+    r3 = index_all(conn, claude)
+    assert (r3.indexed, r3.unchanged, r3.superseded) == (0, 1, 1)
