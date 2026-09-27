@@ -13,8 +13,12 @@ SESSION_SQL = (
 )
 
 
+def session_of(row: sqlite3.Row) -> Session:
+    return Session(**{k: row[k] for k in Session.model_fields})
+
+
 def session_out(conn: sqlite3.Connection, row: sqlite3.Row) -> SessionOut:
-    base = Session(**{k: row[k] for k in Session.model_fields})
+    base = session_of(row)
     tags = [
         r["tag"] for r in conn.execute("SELECT tag FROM tags WHERE session_id=? ORDER BY tag", (row["id"],))
     ]

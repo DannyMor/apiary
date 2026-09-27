@@ -7,6 +7,7 @@ A missing file is fine; every key has a default.
 from __future__ import annotations
 
 import os
+import shlex
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -32,9 +33,19 @@ class Server:
 
 
 @dataclass(frozen=True)
+class Keeper:
+    summarizer: list[str] = field(
+        default_factory=lambda: ["claude", "-p"]
+    )  # command that reads the extract on stdin
+    summary_timeout_s: float = 240.0
+    summary_max_chars: int = 60000
+
+
+@dataclass(frozen=True)
 class Config:
     paths: Paths = field(default_factory=Paths)
     server: Server = field(default_factory=Server)
+    keeper: Keeper = field(default_factory=Keeper)
     source: Path | None = None  # where this config was read from, if anywhere
 
     @classmethod
@@ -49,6 +60,7 @@ class Config:
             raw = tomllib.load(fh)
         paths_raw = raw.get("paths", {})
         server_raw = raw.get("server", {})
+        keeper_raw = raw.get("keeper", {})
         paths = Paths(
             claude_dir=_expand(paths_raw.get("claude_dir", Paths().claude_dir)),
             db=_expand(paths_raw.get("db", Paths().db)),
@@ -58,7 +70,14 @@ class Config:
             host=str(server_raw.get("host", Server().host)),
             port=int(server_raw.get("port", Server().port)),
         )
-        return cls(paths=paths, server=server, source=candidate)
+        keeper = Keeper(
+            summarizer=shlex.split(keeper_raw["summarizer"])
+            if "summarizer" in keeper_raw
+            else Keeper().summarizer,
+            summary_timeout_s=float(keeper_raw.get("summary_timeout_s", Keeper().summary_timeout_s)),
+            summary_max_chars=int(keeper_raw.get("summary_max_chars", Keeper().summary_max_chars)),
+        )
+        return cls(paths=paths, server=server, keeper=keeper, source=candidate)
 
     def ensure_dirs(self) -> None:
         self.paths.db.parent.mkdir(parents=True, exist_ok=True)

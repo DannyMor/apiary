@@ -45,13 +45,17 @@ def index_all(conn: sqlite3.Connection, claude_dir: Path, now: float | None = No
     known = {
         row["id"]: (row["transcript"], row["mtime"], row["size_bytes"])
         for row in conn.execute(
-            "SELECT id, transcript, mtime, size_bytes FROM sessions WHERE status != 'purged'"
+            "SELECT id, transcript, mtime, size_bytes FROM sessions "
+            "WHERE status NOT IN ('purged', 'archived')"
         )
     }
+    archived = {row["id"] for row in conn.execute("SELECT id FROM sessions WHERE status='archived'")}
     seen: set[str] = set()
     reread_all = not _index_version_current(conn)
 
     for session_id, (project_dir, path, st) in _canonical_transcripts(claude_dir, report).items():
+        if session_id in archived:
+            continue  # the keeper moved it; a stray copy under claude_dir does not bring it back
         seen.add(session_id)
         if not reread_all and known.get(session_id) == (str(path), st.st_mtime, st.st_size):
             report.unchanged += 1

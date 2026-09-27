@@ -11,7 +11,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     parent_id      TEXT,
     status         TEXT NOT NULL DEFAULT 'idle',   -- live | idle | archived | purged
     transcript     TEXT NOT NULL,           -- absolute path of the .jsonl
-    worktree       TEXT                     -- .claude/worktrees/<name> the session ran in, if any
+    worktree       TEXT,                    -- .claude/worktrees/<name> the session ran in, if any
+    archived_from  TEXT                     -- JSON [{from, to}] of the files the keeper moved, while archived
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_repo_active ON sessions(repo_name, last_active_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sessions_mtime       ON sessions(mtime);
@@ -101,6 +102,7 @@ def connect(path: Path) -> sqlite3.Connection:
 # full SCHEMA and skips these, so each step must only touch what SCHEMA already contains.
 MIGRATIONS: dict[int, list[str]] = {
     2: ["ALTER TABLE sessions ADD COLUMN worktree TEXT"],
+    3: ["ALTER TABLE sessions ADD COLUMN archived_from TEXT"],
 }
 
 
