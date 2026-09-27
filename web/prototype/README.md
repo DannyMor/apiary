@@ -8,7 +8,14 @@ stage 6 endpoints for every write. Nothing is kept in the browser.
 
 A cell that belongs to several swarms is drawn in the first swarm (hives first, then
 swarms by name) and ghosted in its home hive; every swarm's tray section lists all of
-its members. Keeper buttons record a decision; applying it is stage 8.
+its members. A hive whose every cell is archived leaves the world; the Archive section
+at the bottom of the tray still names it.
+
+The Keeper tab records marks (keep, archive, summarize and archive) and applies them
+with one button: `POST /api/gc/apply` archives the transcript (out of Claude's session
+list, into Apiary's archive) and writes honey where asked. Archived rows offer Honey
+(the summary), Restore (exact undo) and Purge (deletes the archived transcript for good,
+after a confirmation; honey stays).
 
 It is kept as the reference for the port: when the React version and this file
 disagree about how something should look or behave, this file wins until the

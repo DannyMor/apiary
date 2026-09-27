@@ -440,6 +440,7 @@ const api = {
     return r.status === 204 ? null : r.json();
   }
 };
+api.text = async path => { const r = await fetch(path); if (!r.ok) throw new Error(`GET ${path}: ${r.status}`); return r.text(); };
 const parseColor = str => { const [l, c, h] = String(str || '0.64 0.21 22').split(/\s+/).map(Number); return { l, c, h }; };
 const fmtColor = col => `${col.l.toFixed(2)} ${col.c.toFixed(2)} ${Math.round(col.h * 100) / 100}`;
 const byId = id => state.sessions.find(x => x.id === id);
@@ -457,11 +458,12 @@ function sessionFromApi(a){
     msgCount: a.msg_count, toolCalls: a.tool_calls, filesEdited: a.files_edited, parentId: a.parent_id,
     branch: a.branch, worktree: a.worktree,
     active: a.status === 'live', status: a.status === 'archived' ? 'archived' : 'ok',
-    score: a.score, reasons: a.reasons,
+    score: a.score, reasons: a.reasons, hasHoney: !!a.has_honey,
     displayGroup: prev.displayGroup || repo, h: prev.h || 0.2
   };
 }
 function upsertSession(a){
+  if (a.status === 'purged'){ removeSession(a.id); return null; }
   const s = sessionFromApi(a);
   const i = state.sessions.findIndex(x => x.id === s.id);
   if (i >= 0) state.sessions[i] = s; else state.sessions.push(s);
@@ -538,12 +540,16 @@ function connectEvents(){
 
 // ============================================================ layout
 function liveSessions(){ return state.sessions.filter(s => s.status !== 'archived'); }
+// a hive with nothing kept (every cell archived) leaves the world; the archive section still names it
+function worldGroups(){ const live = liveSessions(); return state.groupOrder.filter(gid => state.groups[gid].kind === 'custom' || live.some(s => s.repo === gid)); }
 function computeLayout(){
-  const coords = spiral(state.groupOrder.length);
-  state.groupOrder.forEach((gid,i) => { const p = axialToWorld(coords[i].q, coords[i].r, REGION_SIZE); state.groups[gid].center = { x: p.x, z: p.z }; });
+  const shown = worldGroups();
+  for (const gid of state.groupOrder) delete state.groups[gid].center;
+  const coords = spiral(shown.length);
+  shown.forEach((gid,i) => { const p = axialToWorld(coords[i].q, coords[i].r, REGION_SIZE); state.groups[gid].center = { x: p.x, z: p.z }; });
   const live = liveSessions();
   live.forEach(s => { s.displayGroup = state.groupOrder.find(g => s.swarms.includes(g)) || s.repo; s.ghostPos = null; });
-  for (const gid of state.groupOrder){
+  for (const gid of shown){
     const g = state.groups[gid];
     const own = live.filter(s => s.displayGroup === gid).sort((a,b) => b.lastActiveAt - a.lastActiveAt);
     const ghosts = g.kind === 'repo' ? live.filter(s => s.repo === gid && s.displayGroup !== gid) : [];
@@ -818,6 +824,7 @@ function rebuildScene(){
 
   for (const gid of state.groupOrder){
     const g = state.groups[gid], repo = g.kind === 'repo';
+    if (!g.center) continue;
     const plate = new THREE.Mesh(plateGeo, new THREE.MeshPhysicalMaterial({
       color: threeColorOf(repo ? { l: .78, c: g.color.c * .7, h: g.color.h } : { l: .82, c: .015, h: g.color.h }),
       roughness: .65, metalness: 0, clearcoat: .1, clearcoatRoughness: .5, envMapIntensity: .12 }));
@@ -1062,6 +1069,7 @@ function buildGroupLabels(){
   groupLabels.clear();
   for (const gid of state.groupOrder){
     const g = state.groups[gid];
+    if (!g.center) continue;
     const el = document.createElement('div'); el.className = 'lbl group';
     el.innerHTML = esc(g.name) + '<small>' + g.count + (g.kind === 'custom' ? ' cells on loan' : ' cells') + '</small>';
     labelsEl.appendChild(el); groupLabels.set(gid, el);
@@ -1194,7 +1202,7 @@ function buildSections(){
   const gr = GROUPERS[state.groupBy];
   const byKey = new Map();
   for (const s of live){ const k = gr.key(s); let l = byKey.get(k); if (!l) byKey.set(k, l = []); l.push(s); }
-  if (state.groupBy === 'group') for (const gid of state.groupOrder) if (!byKey.has(gid)) byKey.set(gid, []);   // empty custom groups still show
+  if (state.groupBy === 'group') for (const gid of state.groupOrder) if (!byKey.has(gid) && state.groups[gid].kind === 'custom') byKey.set(gid, []);   // empty swarms still show
   return lastSections = [...byKey.keys()].sort(gr.order).map(k => ({
     id: state.groupBy + ':' + k, key: k, title: gr.title(k),
     rows: byKey.get(k).sort(cmp),
@@ -1265,7 +1273,7 @@ function renderTray(){
   const archived = state.sessions.filter(s => s.status === 'archived');
   if (archived.length){
     html += `<div class="ghead ${state.collapsed.archive?'closed':''}" data-sec="archive"><button class="caret" data-act="toggle">▾</button><span class="swatch" style="background:var(--border)"></span><span class="gname">Archive</span><span class="count">${archived.length}</span></div>`;
-    if (!state.collapsed.archive) html += archived.map(s => `<div class="row ghost" data-id="${s.id}" data-archived="1"><span class="bar" style="background:var(--border)"></span><span class="body"><span class="title">${esc(s.title)}</span><span class="meta">${esc(state.groups[s.repo].name)}, summary saved, transcript archived</span></span><span class="right"><button class="btn quiet" data-act="restore" style="padding:2px 6px;font-size:12px">Restore</button></span></div>`).join('');
+    if (!state.collapsed.archive) html += archived.map(s => `<div class="row ghost" data-id="${s.id}" data-archived="1"><span class="bar" style="background:var(--border)"></span><span class="body"><span class="title">${esc(s.title)}</span><span class="meta">${esc(state.groups[s.repo].name)}, ${s.hasHoney ? 'honey saved, ' : ''}transcript archived</span></span><span class="right">${s.hasHoney ? '<button class="btn quiet" data-act="honey" style="padding:2px 6px;font-size:12px">Honey</button>' : ''}<button class="btn quiet" data-act="restore" style="padding:2px 6px;font-size:12px">Restore</button><button class="btn quiet" data-act="purge" style="padding:2px 6px;font-size:12px" title="Delete the archived transcript for good">Purge</button></span></div>`).join('');
   }
   listEl.innerHTML = html;
   if (state.focusSession){ const el = listEl.querySelector(`.row[data-id="${state.focusSession}"]`); if (el) el.scrollIntoView({ block: 'nearest' }); }
@@ -1298,7 +1306,7 @@ listEl.addEventListener('click', e => {
   if (!row) return;
   const s = state.sessions.find(x => x.id === row.dataset.id);
   if (!s) return;
-  if (act && act.dataset.act === 'restore'){ toast('Restoring an archived cell arrives with the keeper (stage 8)'); return; }
+  if (act && row.dataset.archived){ archivedAction(s, act.dataset.act); return; }
   if (row.dataset.archived) return;
   selectSession(s, e.shiftKey);
   if (!e.shiftKey) focusSession(s);
@@ -1526,9 +1534,10 @@ function buildPicker(container, { initial, others }){
 function renderGc(){
   const cands = liveSessions().filter(s => s.score < state.threshold && state.decisions[s.id] !== 'keep' && !s.active).sort((a,b) => a.score - b.score);
   const kept = Object.values(state.decisions).filter(d => d === 'keep').length;
+  const pending = liveSessions().filter(s => state.decisions[s.id] === 'archive' || state.decisions[s.id] === 'summarize_archive').length;
   const DECIDED = { archive: 'marked: archive', summarize_archive: 'marked: summarize and archive' };
-  let html = `<div class="gc-head">The keeper suggests culling cells scoring below <b id="thr">${state.threshold}</b>. Height in the world now shows the score, so candidates are the low ones. Marks are kept; the keeper acts on them when it runs.
-    <input type="range" id="thr-range" min="5" max="80" step="1" value="${state.threshold}"><div>${cands.length} candidate${cands.length===1?'':'s'}${kept ? ', ' + kept + ' excluded by you' : ''}</div></div>`;
+  let html = `<div class="gc-head">The keeper suggests culling cells scoring below <b id="thr">${state.threshold}</b>. Height in the world now shows the score, so candidates are the low ones. Mark cells, then apply: archiving moves the transcript out of Claude's session list into Apiary's archive; honey is the summary kept next to it.
+    <input type="range" id="thr-range" min="5" max="80" step="1" value="${state.threshold}"><div>${cands.length} candidate${cands.length===1?'':'s'}${kept ? ', ' + kept + ' excluded by you' : ''}${pending ? ` <button class="btn primary" id="gc-apply" style="margin-left:8px">Apply ${pending} mark${pending===1?'':'s'}</button>` : ''}</div></div>`;
   if (!cands.length) html += '<div class="empty">Nothing to collect at this threshold.</div>';
   cands.forEach(s => {
     const g = state.groups[s.repo], d = state.decisions[s.id];
@@ -1539,6 +1548,7 @@ function renderGc(){
     </div>`;
   });
   listEl.innerHTML = html;
+  const ap = $('#gc-apply'); if (ap) ap.addEventListener('click', applyMarks);
   const r = $('#thr-range');
   r.addEventListener('input', () => { state.threshold = +r.value; $('#thr').textContent = r.value; });
   r.addEventListener('change', () => { saveSettings({ threshold: state.threshold }); renderGc(); });
@@ -1551,14 +1561,37 @@ listEl.addEventListener('click', e => {
   else if (act === 'archive') decide(s, 'archive', 'Marked for the keeper: archive');
   else if (act === 'undo') decide(s, null, 'Mark removed');
   else if (act === 'summ'){
-    const g = state.groups[s.repo];
-    const summary = `# ${s.title}\n\nrepo: ${g.name}\nlast active: ${new Date(s.lastActiveAt).toISOString().slice(0,10)}\nmessages: ${s.msgCount}, tool calls: ${s.toolCalls}, files edited: ${s.filesEdited}${s.parentId ? '\nforked from: ' + s.parentId : ''}\n\n(the keeper writes the summary with claude -p when it runs)`;
-    const dlg = openModal(`<h3>Honey: the summary kept when this cell is archived</h3><pre>${esc(summary)}</pre>
-      <div class="field"><span>Will be written to archive/${esc(g.name)}/${s.id}.md next to the transcript when the keeper runs.</span></div>
+    const dlg = openModal(`<h3>Honey: summarize, then archive</h3>
+      <div class="field"><span>When marks are applied the keeper writes a Markdown summary of this session with <code>claude -p</code>, keeps it next to the archived transcript, and moves the transcript out of Claude's session list. Restore brings it back.</span></div>
       <div class="actions"><button class="btn" data-close>Cancel</button><button class="btn primary" id="sum-ok">Mark: summarize and archive</button></div>`);
     dlg.querySelector('#sum-ok').addEventListener('click', () => { closeModal(); decide(s, 'summarize_archive', 'Marked for the keeper: summarize and archive'); });
   }
 });
+async function applyMarks(){
+  const btn = $('#gc-apply'); if (btn){ btn.disabled = true; btn.textContent = 'The keeper is working…'; }
+  try {
+    const r = await api.send('POST', '/api/gc/apply');
+    await refreshSessions([...r.archived, ...r.failed.map(f => f.session_id)]);
+    rebuildScene(); renderTray();
+    toast(`Archived ${r.archived.length}, summarized ${r.summarized.length}` + (r.failed.length ? `, failed ${r.failed.length}: ${r.failed[0].error}` : ''));
+  } catch (err) { showError(err); renderTray(); }
+}
+function archivedAction(s, action){
+  const path = `/api/sessions/${encodeURIComponent(s.id)}`;
+  if (action === 'restore'){
+    api.send('POST', `${path}/restore`).then(upsertSession).then(() => { rebuildScene(); renderTray(); toast('Restored to ' + state.groups[s.repo].name); }).catch(showError);
+  } else if (action === 'honey'){
+    api.text(`${path}/honey`).then(text => openModal(`<h3>Honey: ${esc(s.title)}</h3><pre style="white-space:pre-wrap;max-height:60vh;overflow:auto">${esc(text)}</pre>
+      <div class="actions"><button class="btn primary" data-close>Done</button></div>`)).catch(showError);
+  } else if (action === 'purge'){
+    const dlg = openModal(`<h3>Purge ${esc(s.title)}?</h3><div class="field"><span>The archived transcript is deleted for good. ${s.hasHoney ? 'The honey stays.' : 'There is no honey for it.'}</span></div>
+      <div class="actions"><button class="btn" data-close>Cancel</button><button class="btn danger" id="purge-ok">Purge</button></div>`);
+    dlg.querySelector('#purge-ok').addEventListener('click', () => {
+      closeModal();
+      api.send('POST', '/api/gc/purge', { session_ids: [s.id] }).then(() => refreshSessions([s.id])).then(() => { rebuildScene(); renderTray(); toast('Purged ' + s.title); }).catch(showError);
+    });
+  }
+}
 function decide(s, decision, msg){
   const req = decision ? api.send('POST', '/api/gc/decisions', { session_id: s.id, decision }) : api.send('DELETE', `/api/gc/decisions/${encodeURIComponent(s.id)}`);
   req.then(upsertSession).then(() => { renderGc(); toast(msg); }).catch(showError);
