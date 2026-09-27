@@ -9,3 +9,10 @@ archive_dir = "~/.local/share/apiary/archive"  # archived transcripts and summar
 [server]
 host = "127.0.0.1"
 port = 7431
+
+[keeper]
+# The command that writes honey: it gets the prompt as its last argument and the session
+# extract on stdin. Add --model <id> if your claude default is unsuitable.
+summarizer = "claude -p --no-session-persistence --output-format text"
+summary_timeout_s = 240
+summary_max_chars = 60000

@@ -34,9 +34,11 @@ class Server:
 
 @dataclass(frozen=True)
 class Keeper:
+    # The command that reads the extract on stdin and prints the summary. Without
+    # --no-session-persistence every keeper run would itself become a session.
     summarizer: list[str] = field(
-        default_factory=lambda: ["claude", "-p"]
-    )  # command that reads the extract on stdin
+        default_factory=lambda: ["claude", "-p", "--no-session-persistence", "--output-format", "text"]
+    )
     summary_timeout_s: float = 240.0
     summary_max_chars: int = 60000
 

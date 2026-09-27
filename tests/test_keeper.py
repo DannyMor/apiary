@@ -115,4 +115,10 @@ def test_config_reads_keeper_section(tmp_path: Path) -> None:
     cfg = Config.load(p)
     assert cfg.keeper.summarizer == ["claude", "-p", "--model", "sonnet"]
     assert (cfg.keeper.summary_timeout_s, cfg.keeper.summary_max_chars) == (30.0, 1000)
-    assert Config().keeper.summarizer == ["claude", "-p"]
+    assert Config().keeper.summarizer == [
+        "claude",
+        "-p",
+        "--no-session-persistence",
+        "--output-format",
+        "text",
+    ]
