@@ -8,6 +8,7 @@ export class FakeApi implements ApiClient {
   stored: Settings = {};
   honeyText = new Map<string, string>();
   calls: string[] = [];
+  opened: string[] = [];
   private handler: EventHandler | null = null;
   private status: StatusHandler | null = null;
   private nextId = 1;
@@ -72,6 +73,7 @@ export class FakeApi implements ApiClient {
   }
   async restore(id: string) { const s = this.must(id); s.status = "idle"; s.decision = null; return s; }
   async purge(ids: string[]) { for (const id of ids) this.must(id).status = "purged"; return { purged: ids }; }
+  async open(id: string) { const s = this.must(id); if (!s.openings.some((o) => o.url)) throw new Error("nothing to open"); this.opened.push(id); }
   async honey(id: string) { const t = this.honeyText.get(id); if (t === undefined) throw new Error("no honey"); return t; }
   async suggestColors(n: number) { return Array.from({ length: n }, (_, i) => `0.64 0.21 ${(40 + i * 70) % 360}`); }
   events(onEvent: EventHandler, onStatus: StatusHandler) { this.handler = onEvent; this.status = onStatus; onStatus("live"); return () => { this.handler = null; }; }
@@ -83,7 +85,7 @@ export function fakeSessionOut(patch: Partial<SessionOut> & { id: string }): Ses
   return {
     repo_path: "/u/src/a", repo_name: "a", branch: "main", title: patch.id, created_at: 1_700_000_000, last_active_at: 1_700_000_000,
     mtime: 0, size_bytes: 1, msg_count: 4, tool_calls: 1, files_edited: 0, parent_id: null, status: "idle", transcript: "/x",
-    worktree: null, score: 50, reasons: [], tags: [], groups: ["repo:a"], decision: null, has_honey: false, ...patch,
+    worktree: null, score: 50, reasons: [], tags: [], groups: ["repo:a"], decision: null, has_honey: false, openings: [], ...patch,
   };
 }
 export const fakeGroupOut = (id: string, name: string, kind: "repo" | "custom", hue: number, members: string[] = []): GroupOut =>

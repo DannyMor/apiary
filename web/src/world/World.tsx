@@ -37,6 +37,7 @@ export function World() {
       onPickPlate: (gid) => store.getState().requestCamera({ kind: "group", gid }),
       onHover: (id) => store.getState().setHover(id),
       onView: (g, s) => store.getState().setFocus(g, s, engine.cameraTarget()),
+      onOpen: (id) => void store.getState().openSession(id),
     });
     engineRef.current = engine;
     const ro = new ResizeObserver(() => engine.resize());

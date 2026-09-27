@@ -22,6 +22,7 @@ export interface EngineCallbacks {
   onPickPlate(gid: string): void;
   onHover(id: string | null): void;
   onView(focusGroup: string | null, focusSession: string | null): void;
+  onOpen(id: string): void;
 }
 interface Cell { s: Session; pos: XZ; ghostPos?: XZ; h: number; hTarget: number; slot: { mesh: THREE.InstancedMesh; i: number } | null; group: string }
 interface Active { s: Session; core: THREE.Mesh; light: THREE.PointLight; spill: THREE.Mesh; haze: THREE.Mesh; hCore: { value: number }; hHaze: { value: number }; glowMat: THREE.MeshBasicMaterial; glowLo: THREE.Color; glowHi: THREE.Color; coreMat: THREE.Material }
@@ -474,7 +475,7 @@ export class WorldEngine {
     });
     canvas.addEventListener("pointerleave", () => this.cb.onHover(null));
     canvas.addEventListener("wheel", (e) => { e.preventDefault(); this.zoom(Math.exp(clamp(e.deltaY, -120, 120) * 0.0012)); }, { passive: false });
-    canvas.addEventListener("dblclick", (e) => { if (!this.pickAt(e)) this.viewOverview(); });
+    canvas.addEventListener("dblclick", (e) => { const cell = this.pickAt(e); if (cell) this.cb.onOpen(cell.s.id); else this.viewOverview(); });
   }
   private rotate(dx: number, dy: number) { this.orbit.goal.theta -= dx * 0.006; this.orbit.goal.phi = clamp(this.orbit.goal.phi - dy * 0.006, 0.02, 1.52); }
   private pan(dx: number, dy: number) {

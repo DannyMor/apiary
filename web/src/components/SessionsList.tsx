@@ -5,6 +5,7 @@ import { cssOf, shadeOf } from "../lib/color";
 import type { Section } from "../lib/sections";
 import { ageText, recencyOf } from "../lib/time";
 import { Icon } from "./icons";
+import { copyText } from "../store";
 
 export function SessionsList() {
   const sections = useSections();
@@ -89,6 +90,8 @@ export function Row({ s, ghost, sec }: { s: Session; ghost: boolean; sec?: Secti
   const select = useApiary((st) => st.select);
   const setHover = useApiary((st) => st.setHover);
   const requestCamera = useApiary((st) => st.requestCamera);
+  const showToast = useApiary((st) => st.showToast);
+  const openSession = useApiary((st) => st.openSession);
   if (!g) return null;
   const rec = recencyOf(s.lastActiveAt, now), css = cssOf(shadeOf(g.color, rec, s.active));
   const bits = [g.name, ageText(s.lastActiveAt, now), `${s.msgCount} msgs`];
@@ -106,6 +109,14 @@ export function Row({ s, ghost, sec }: { s: Session; ghost: boolean; sec?: Secti
       </span>
       <span className="right">
         {s.active && <span className="pulse" style={{ "--pc": css } as React.CSSProperties} />}
+        {s.openings.map((o) =>
+          o.url ? (
+            <a key={o.label} className="open" href={o.url} title={o.label} aria-label={o.label} onClick={(e) => { e.preventDefault(); e.stopPropagation(); void openSession(s.id); }}><Icon.open /></a>
+          ) : o.command ? (
+            <button key={o.label} className="open" title={`${o.label}: copy \`${o.command}\``} aria-label={o.label}
+              onClick={(e) => { e.stopPropagation(); copyText(o.command!).then(() => showToast(`Copied: ${o.command}`)).catch(() => showToast(o.command!)); }}><Icon.terminal /></button>
+          ) : null,
+        )}
         <span className={`score ${s.score >= 70 ? "hi" : s.score < 40 ? "lo" : ""}`} title="keep score">{s.score}</span>
       </span>
     </div>

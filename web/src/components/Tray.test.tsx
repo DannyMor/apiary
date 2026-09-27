@@ -8,7 +8,7 @@ import { Tray } from "./Tray";
 async function mount() {
   const api = new FakeApi(
     [
-      fakeSessionOut({ id: "a1", title: "Refactor auth", status: "live", score: 100, last_active_at: Date.now() / 1000 }),
+      fakeSessionOut({ id: "a1", title: "Refactor auth", status: "live", score: 100, last_active_at: Date.now() / 1000, openings: [{ label: "Open in Claude", url: "claude://claude.ai/epitaxy/local_a1", command: null }, { label: "Resume in terminal", url: null, command: "claude --resume a1" }] }),
       fakeSessionOut({ id: "a2", title: "Review PR 9", score: 20, last_active_at: Date.now() / 1000 - 40 * 86400, parent_id: "a1" }),
       fakeSessionOut({ id: "b1", title: "Docs", repo_name: "b", groups: ["repo:b", "swarm:x"], score: 55, tags: ["needs-review"] }),
       fakeSessionOut({ id: "old", title: "Archived thing", status: "archived", has_honey: true }),
@@ -62,4 +62,17 @@ test("the keeper lists candidates below the threshold, not the running one, and 
   await user.click(screen.getByRole("button", { name: "Apply 1 mark" }));
   await screen.findByText("Nothing to collect at this threshold.");
   expect(store.getState().sessions.a2.status).toBe("archived");
+});
+
+test("a row offers the daemon's openings: the app link asks the daemon to open, the command is copied", async () => {
+  const { api } = await mount();
+  const user = userEvent.setup();
+  const row = screen.getByText("Refactor auth").closest(".row")!;
+  const link = within(row as HTMLElement).getByRole("link", { name: "Open in Claude" });
+  expect(link).toHaveAttribute("href", "claude://claude.ai/epitaxy/local_a1");
+  await user.click(link);
+  expect(api.opened).toEqual(["a1"]);
+  expect(within(row as HTMLElement).getByRole("button", { name: "Resume in terminal" })).toBeInTheDocument();
+  const other = screen.getByText("Review PR 9").closest(".row")!;
+  expect(within(other as HTMLElement).queryByRole("link")).toBeNull();
 });

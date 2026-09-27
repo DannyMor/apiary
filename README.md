@@ -23,5 +23,8 @@ The daemon serves the React UI from `web/dist` when it exists (`cd web && npm in
 and the single-file prototype at `/prototype` either way. Copy `apiary.example.toml` to
 `~/.config/apiary/apiary.toml` to change paths or the keeper's summarizer command.
 
+A session's row (and a double-click on its cell) opens it in the Claude desktop app; the
+`[desktop_app]` section of the config holds the app internals that makes that possible.
+
     uv run pytest -q         # backend tests
     cd web && npm test       # UI tests

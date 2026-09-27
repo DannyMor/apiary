@@ -223,6 +223,9 @@ svg.i,.modes svg,.seg svg,.toolbar svg{width:14px;height:14px;fill:none;stroke:c
 .picker .prev .warn{color:var(--danger)}
 
 @media (prefers-reduced-motion: reduce){.row .pulse{animation:none}.ghead .caret{transition:none}}
+.row .open{display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;border:0;background:transparent;color:var(--muted);padding:0}
+.row .open svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.row .open:hover{background:var(--panel);color:var(--accent)}
 #conn{position:absolute;right:14px;bottom:12px;font-size:11px;letter-spacing:.02em;color:var(--muted);pointer-events:none}
 #conn::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:#4ea86b;margin-right:6px;vertical-align:middle}
 #conn.off::before{background:#c9873a}
@@ -302,7 +305,7 @@ svg.i,.modes svg,.seg svg,.toolbar svg{width:14px;height:14px;fill:none;stroke:c
       <button data-view="overview" title="Angled view of every region"><svg viewBox="0 0 16 16"><path d="M1.5 11.5L8 8l6.5 3.5M8 8V2.5M3 5.5l5-3 5 3"/></svg>Overview</button>
       <button id="worldcolor" title="World color" style="flex:0 0 36px"><span class="wdot"></span></button>
     </div>
-    <div id="hud">Drag to orbit, right-drag or shift-drag to pan, wheel to zoom. Click a cell to focus it, shift-click to select several, double-click empty space to see the whole apiary.</div>
+    <div id="hud">Drag to orbit, right-drag or shift-drag to pan, wheel to zoom. Click a cell to focus it, shift-click to select several, double-click a cell to open it in Claude, double-click empty space to see the whole apiary.</div>
     <div id="toast"></div>
     <div id="conn" class="off">connecting…</div>
   </main>
@@ -458,7 +461,7 @@ function sessionFromApi(a){
     msgCount: a.msg_count, toolCalls: a.tool_calls, filesEdited: a.files_edited, parentId: a.parent_id,
     branch: a.branch, worktree: a.worktree,
     active: a.status === 'live', status: a.status === 'archived' ? 'archived' : 'ok',
-    score: a.score, reasons: a.reasons, hasHoney: !!a.has_honey,
+    score: a.score, reasons: a.reasons, hasHoney: !!a.has_honey, openings: a.openings || [],
     displayGroup: prev.displayGroup || repo, h: prev.h || 0.2
   };
 }
@@ -931,7 +934,13 @@ canvas.addEventListener('pointerup', e => {
 });
 canvas.addEventListener('pointerleave', () => setHover(null));
 canvas.addEventListener('wheel', e => { e.preventDefault(); orbit.zoom(Math.exp(clamp(e.deltaY, -120, 120) * 0.0012)); }, { passive: false });
-canvas.addEventListener('dblclick', e => { if (!pickAt(e)) resetView(); });
+canvas.addEventListener('dblclick', e => { const s = pickAt(e); if (s) openSession(s); else resetView(); });
+// the daemon hands the link to the OS (a page inside the desktop app cannot); navigating here is the fallback
+function openSession(s){
+  const link = (s.openings || []).find(o => o.url);
+  if (!link) return toast('No way to open this session from here');
+  api.send('POST', `/api/sessions/${encodeURIComponent(s.id)}/open`).catch(() => { location.href = link.url; });
+}
 
 const raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2();
 function setRay(e){
@@ -1220,7 +1229,7 @@ function rowHtml(s, ghost){
   return `<div class="row ${state.selected.has(s.id)?'sel':''} ${ghost?'ghost':''}" data-id="${s.id}" style="--rowc:${cssOf(g.color)}">
     <span class="bar" style="background:${css}"></span>
     <span class="body" style="opacity:${(0.5 + 0.5*(s.active?1:rec)).toFixed(2)}"><span class="title">${esc(s.title)}</span><span class="meta">${esc(bits.join(', '))}</span>${customTagsOf(s).length ? '<span class="tags">' + customTagsOf(s).map(t => `<span>${esc(t)}</span>`).join('') + '</span>' : ''}</span>
-    <span class="right">${s.active ? `<span class="pulse" style="--pc:${css}"></span>` : ''}<span class="score ${s.score >= 70 ? 'hi' : s.score < 40 ? 'lo' : ''}" title="keep score">${s.score}</span></span>
+    <span class="right">${s.active ? `<span class="pulse" style="--pc:${css}"></span>` : ''}${(s.openings || []).map(o => o.url ? `<a class="open" href="${esc(o.url)}" title="${esc(o.label)}" data-open="1"><svg viewBox="0 0 16 16"><path d="M6.5 3.5H3.5v9h9V9.5M9 3.5h3.5V7M12.5 3.5L7.5 8.5"/></svg></a>` : o.command ? `<button class="open" title="${esc(o.label)}: copy ${esc(o.command)}" data-open-cmd="${esc(o.command)}"><svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 6.5l2 1.5-2 1.5M8.5 9.5h3"/></svg></button>` : '').join('')}<span class="score ${s.score >= 70 ? 'hi' : s.score < 40 ? 'lo' : ''}" title="keep score">${s.score}</span></span>
   </div>`;
 }
 function secSelState(sec){
@@ -1306,6 +1315,9 @@ listEl.addEventListener('click', e => {
   if (!row) return;
   const s = state.sessions.find(x => x.id === row.dataset.id);
   if (!s) return;
+  const cmdBtn = e.target.closest('[data-open-cmd]');
+  if (cmdBtn){ const cmd = cmdBtn.dataset.openCmd; (navigator.clipboard ? navigator.clipboard.writeText(cmd) : Promise.reject()).then(() => toast('Copied: ' + cmd), () => toast(cmd)); return; }
+  if (e.target.closest('[data-open]')){ e.preventDefault(); openSession(s); return; }
   if (act && row.dataset.archived){ archivedAction(s, act.dataset.act); return; }
   if (row.dataset.archived) return;
   selectSession(s, e.shiftKey);

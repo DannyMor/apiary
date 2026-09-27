@@ -63,10 +63,18 @@ export interface ApiaryState {
   restore(id: string): Promise<void>;
   purge(id: string): Promise<void>;
   honey(id: string): Promise<string>;
+  /** Open the session where it lives: the daemon launches the first url opening (falling back to navigating
+   *  to it here), else the first command is copied. */
+  openSession(id: string): Promise<void>;
 }
 export type ApiaryStore = StoreApi<ApiaryState>;
 
 const SETTINGS_DEBOUNCE_MS = 300;
+
+export async function copyText(text: string): Promise<void> {
+  if (!navigator.clipboard) throw new Error("no clipboard");
+  await navigator.clipboard.writeText(text);
+}
 
 export function createApiaryStore(api: ApiClient): ApiaryStore {
   let settingsTimer: ReturnType<typeof setTimeout> | null = null;
@@ -228,6 +236,16 @@ export function createApiaryStore(api: ApiClient): ApiaryStore {
       restore: (id) => guarded(async () => { upsertSession(await api.restore(id)); }),
       purge: (id) => guarded(async () => { await api.purge([id]); await get().refreshSessions([id]); }),
       honey: (id) => guarded(() => api.honey(id)),
+      async openSession(id) {
+        const s = get().sessions[id];
+        const link = s?.openings.find((o) => o.url), cmd = s?.openings.find((o) => o.command);
+        if (link?.url) {
+          try { await api.open(id); } catch { window.location.href = link.url; }
+          return;
+        }
+        if (cmd?.command) { await copyText(cmd.command).then(() => get().showToast(`Copied: ${cmd.command}`)).catch(() => get().showToast(cmd.command!)); return; }
+        get().showToast("No way to open this session from here");
+      },
     };
   });
   return store;

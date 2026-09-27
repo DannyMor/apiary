@@ -218,3 +218,6 @@ svg.i,.modes svg,.seg svg,.toolbar svg{width:14px;height:14px;fill:none;stroke:c
 #conn{position:absolute;right:14px;bottom:12px;font-size:11px;letter-spacing:.02em;color:var(--muted);pointer-events:none}
 #conn::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:#4ea86b;margin-right:6px;vertical-align:middle}
 #conn.off::before{background:#c9873a}
+.row .open{display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;border:0;background:transparent;color:var(--muted);padding:0}
+.row .open svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.row .open:hover{background:var(--panel);color:var(--accent)}

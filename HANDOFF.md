@@ -205,6 +205,28 @@ fixed on the way: a hive whose every cell is on loan vanished from the tray; new
 started on a color that collided with the first hive. Not covered by tests: the engine
 (WebGL has no jsdom). The bundle is one 860 KB chunk (three.js); code-split if it matters.
 
+## Open a session where it lives (done 27 Sep 2026)
+
+`openers.py`: an `Opener` turns a session id into `Opening` values, a label plus either a
+`url` to navigate to or a `command` to copy; every served session carries `openings`
+(none when archived) and the UI renders them generically, so a new place to open sessions
+is a new class and nothing else. `ClaudeDesktopOpener` is the only code that knows the
+desktop app: the app keeps one JSON per session under
+`~/Library/Application Support/Claude/claude-code-sessions/<org>/<user>/<app id>.json` whose
+`cliSessionId` is the transcript id, and `claude://claude.ai/epitaxy/<app id>` opens that
+session (the link the app itself hands out). Those three facts are `[desktop_app]` config
+(`registry_dir`, `transcript_key`, `link`) with defaults, so an app update is a TOML edit.
+`ClaudeCliOpener` always offers `claude --resume <id>`. Openers refresh on every index run.
+
+`POST /api/sessions/{id}/open` hands the first url opening to the OS (`open` on macOS,
+`xdg-open` on Linux; the launcher is injectable for tests). Needed because a page inside the
+desktop app's preview pane does not forward `claude://` navigations. The row's "Open in
+Claude" link and a double-click on a cell call it, falling back to navigating to the href;
+the terminal button copies the command. Verified: opening another session through the
+endpoint moved that session's `lastFocusedAt` in the registry to the second of the request;
+opening the current one again does not rewrite it. On this Mac all 62 app sessions map to a
+transcript; sessions started from a terminal only get the resume command.
+
 ## Decisions already made (don't reopen without reason)
 
 - White world, camera-relative everything, no fog; unlit floor with a shadow layer.

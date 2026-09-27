@@ -15,7 +15,9 @@ The Keeper tab records marks (keep, archive, summarize and archive) and applies 
 with one button: `POST /api/gc/apply` archives the transcript (out of Claude's session
 list, into Apiary's archive) and writes honey where asked. Archived rows offer Honey
 (the summary), Restore (exact undo) and Purge (deletes the archived transcript for good,
-after a confirmation; honey stays).
+after a confirmation; honey stays). Every row also carries the daemon's `openings`: a link
+that opens the session in the Claude desktop app (through `POST /api/sessions/{id}/open`)
+and a button that copies `claude --resume <id>`; double-clicking a cell opens it too.
 
 It is kept as the reference for the port: when the React version and this file
 disagree about how something should look or behave, this file wins until the

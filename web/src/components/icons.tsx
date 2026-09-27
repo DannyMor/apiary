@@ -11,5 +11,7 @@ export const Icon = {
   edit: () => <svg viewBox="0 0 16 16"><path d="M11.5 2.5l2 2L5 13H3v-2zM10 4l2 2" /></svg>,
   checkAll: () => <svg viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2" fill="currentColor" stroke="none" /><path d="M5 8l2 2 4-4" stroke="var(--panel)" strokeWidth="1.6" /></svg>,
   checkSome: () => <svg viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2" /><path d="M5 8h6" strokeWidth="1.8" /></svg>,
+  open: () => <svg viewBox="0 0 16 16"><path d="M6.5 3.5H3.5v9h9V9.5M9 3.5h3.5V7M12.5 3.5L7.5 8.5" /></svg>,
+  terminal: () => <svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.5" /><path d="M5 6.5l2 1.5-2 1.5M8.5 9.5h3" /></svg>,
   checkNone: () => <svg viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2" /></svg>,
 };

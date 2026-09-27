@@ -22,7 +22,7 @@ export function Overlay() {
       <div id="hud">
         {loadError
           ? `Could not load from the Apiary daemon (${loadError}). Is \`apiary serve\` running?`
-          : "Drag to orbit, right-drag or shift-drag to pan, wheel to zoom. Click a cell to focus it, shift-click to select several, double-click empty space to see the whole apiary."}
+          : "Drag to orbit, right-drag or shift-drag to pan, wheel to zoom. Click a cell to focus it, shift-click to select several, double-click a cell to open it in Claude, double-click empty space to see the whole apiary."}
       </div>
       <div id="toast" className={toast ? "on" : ""}>{toast}</div>
       <div id="conn" className={conn === "live" ? "" : "off"}>{conn === "live" ? "live" : conn === "offline" ? "reconnecting…" : "connecting…"}</div>

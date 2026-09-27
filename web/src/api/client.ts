@@ -23,6 +23,8 @@ export interface ApiClient {
   restore(id: string): Promise<SessionOut>;
   purge(ids: string[]): Promise<{ purged: string[] }>;
   honey(id: string): Promise<string>;
+  /** Ask the daemon to open the session where it lives (it hands the link to the OS). */
+  open(id: string): Promise<void>;
   suggestColors(n: number, exclude?: string[]): Promise<string[]>;
   /** Subscribe to the websocket; the returned function disconnects. Reconnects on its own. */
   events(onEvent: EventHandler, onStatus: StatusHandler): () => void;
@@ -69,6 +71,7 @@ export class HttpApi implements ApiClient {
     if (!r.ok) throw new Error(`no honey (${r.status})`);
     return r.text();
   }
+  open(id: string) { return this.json<void>("POST", `/api/sessions/${enc(id)}/open`); }
   suggestColors(n: number, exclude: string[] = []) {
     const q = new URLSearchParams([["n", String(n)], ...exclude.map((c) => ["exclude", c] as [string, string])]);
     return this.json<string[]>("GET", `/api/colors/suggest?${q}`);

@@ -4,7 +4,7 @@ export function fakeSession(patch: Partial<Session> & { id: string }): Session {
   return {
     title: "untitled", repo: "repo:a", swarms: [], createdAt: 0, lastActiveAt: 0, msgCount: 4, toolCalls: 1,
     filesEdited: 0, parentId: null, branch: "main", worktree: null, active: false, status: "ok", score: 50,
-    reasons: [], tags: [], decision: null, hasHoney: false, ...patch,
+    reasons: [], tags: [], decision: null, hasHoney: false, openings: [], ...patch,
   };
 }
 
