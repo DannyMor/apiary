@@ -8,6 +8,7 @@ nothing else. Only the metadata Apiary needs is kept; message bodies are not sto
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -66,6 +67,23 @@ def read_transcript(path: Path) -> TranscriptFacts:
     own_id = path.stem
     facts = TranscriptFacts(session_id=own_id)
     saw_own = False
+    for rec in iter_records(path):
+        sid = rec.get("sessionId") or rec.get("session_id")
+        if isinstance(sid, str) and sid != own_id:
+            if not saw_own:
+                facts.parent_id = sid
+            continue
+        saw_own = saw_own or sid == own_id
+        _absorb(facts, rec)
+    if facts.custom_title:
+        facts.title = _clean_title(facts.custom_title)
+    elif not facts.title and facts.summary:
+        facts.title = _clean_title(facts.summary)
+    return facts
+
+
+def iter_records(path: Path) -> Iterator[dict]:
+    """The JSON objects in a transcript, one per line; anything unparsable is skipped."""
     with path.open("r", encoding="utf-8", errors="replace") as fh:
         for raw in fh:
             raw = raw.strip()
@@ -75,20 +93,18 @@ def read_transcript(path: Path) -> TranscriptFacts:
                 rec = json.loads(raw)
             except json.JSONDecodeError:
                 continue
-            if not isinstance(rec, dict):
-                continue
-            sid = rec.get("sessionId") or rec.get("session_id")
-            if isinstance(sid, str) and sid != own_id:
-                if not saw_own:
-                    facts.parent_id = sid
-                continue
-            saw_own = saw_own or sid == own_id
-            _absorb(facts, rec)
-    if facts.custom_title:
-        facts.title = _clean_title(facts.custom_title)
-    elif not facts.title and facts.summary:
-        facts.title = _clean_title(facts.summary)
-    return facts
+            if isinstance(rec, dict):
+                yield rec
+
+
+def own_records(path: Path) -> Iterator[dict]:
+    """The records that belong to this session, without the ancestors' history a fork begins with."""
+    own_id = path.stem
+    for rec in iter_records(path):
+        sid = rec.get("sessionId") or rec.get("session_id")
+        if isinstance(sid, str) and sid != own_id:
+            continue
+        yield rec
 
 
 def _absorb(f: TranscriptFacts, rec: dict) -> None:
