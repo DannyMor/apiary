@@ -33,6 +33,7 @@ def session_out(conn: sqlite3.Connection, row: sqlite3.Row) -> SessionOut:
         tags=tags,
         groups=groups,
         decision=row["decision"],
+        has_honey=bool(row["honey"]),
     )
 
 

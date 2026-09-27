@@ -43,6 +43,7 @@ class SessionOut(Session):
     tags: list[str] = Field(default_factory=list)
     groups: list[str] = Field(default_factory=list)
     decision: Decision | None = None
+    has_honey: bool = False
 
 
 class Group(BaseModel):
@@ -85,6 +86,26 @@ class TagCount(BaseModel):
 class DecisionIn(BaseModel):
     session_id: str
     decision: Decision
+
+
+class PurgeIn(BaseModel):
+    session_ids: list[str] = Field(min_length=1)
+
+
+class Failure(BaseModel):
+    session_id: str
+    error: str
+
+
+class ApplyReport(BaseModel):
+    archived: list[str] = Field(default_factory=list)
+    summarized: list[str] = Field(default_factory=list)
+    failed: list[Failure] = Field(default_factory=list)
+
+
+class HoneyOut(BaseModel):
+    path: str
+    text: str
 
 
 class Health(BaseModel):

@@ -14,20 +14,25 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
-from apiary import __version__, colors, curation
+from apiary import __version__, colors, curation, keeper
 from apiary.config import Config
 from apiary.curation import RepoHive, UnknownId
 from apiary.db import connect
 from apiary.indexer import IndexReport
+from apiary.keeper import ClaudeCli, NotArchived, Summarizer
 from apiary.models import (
+    ApplyReport,
     DecisionIn,
+    Failure,
     Group,
     GroupPatch,
     Health,
+    HoneyOut,
     MembersIn,
+    PurgeIn,
     SessionOut,
     SwarmIn,
     TagCount,
@@ -46,13 +51,15 @@ SORTS = {
 }
 
 
-def create_app(config: Config | None = None) -> FastAPI:
+def create_app(config: Config | None = None, summarizer: Summarizer | None = None) -> FastAPI:
     config = config or Config.load()
     config.ensure_dirs()
+    summarizer = summarizer or ClaudeCli(config.keeper.summarizer, config.keeper.summary_timeout_s)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.config = config
+        app.state.summarizer = summarizer
         app.state.db = connect(config.paths.db)
         app.state.hub = Hub()
         app.state.watcher = Watcher(app.state.db, config.paths.claude_dir, app.state.hub)
@@ -78,6 +85,14 @@ def create_app(config: Config | None = None) -> FastAPI:
         return JSONResponse(
             {"detail": f"{exc.args[0]} is a repo hive; the indexer owns its members"}, status_code=409
         )
+
+    @app.exception_handler(NotArchived)
+    async def not_archived(_: Request, exc: NotArchived) -> JSONResponse:
+        return JSONResponse({"detail": f"{exc.args[0]} is not archived"}, status_code=409)
+
+    @app.exception_handler(FileNotFoundError)
+    async def file_missing(_: Request, exc: FileNotFoundError) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=409)
 
     @app.get("/api/health", response_model=Health)
     async def health() -> Health:
@@ -211,6 +226,60 @@ def create_app(config: Config | None = None) -> FastAPI:
         curation.clear_decision(app.state.db, session_id)
         return _session_changed(app, session_id)
 
+    @app.post("/api/gc/apply", response_model=ApplyReport)
+    async def gc_apply() -> ApplyReport:
+        """Archive every pending decision, honey first where asked; one failure does not stop the rest."""
+        report = ApplyReport()
+        pending = app.state.db.execute(
+            "SELECT session_id, decision FROM gc_decisions WHERE applied_at IS NULL "
+            "AND decision IN ('archive', 'summarize_archive') ORDER BY session_id"
+        ).fetchall()
+        for row in pending:
+            session_id = row["session_id"]
+            try:
+                if row["decision"] == "summarize_archive":
+                    await _make_honey(app, session_id)
+                    report.summarized.append(session_id)
+                keeper.archive(app.state.db, config, session_id)
+                report.archived.append(session_id)
+                _session_changed(app, session_id)
+            except Exception as exc:
+                report.failed.append(Failure(session_id=session_id, error=str(exc)))
+        return report
+
+    @app.post("/api/gc/purge")
+    async def gc_purge(body: PurgeIn) -> dict[str, list[str]]:
+        keeper.purge(app.state.db, body.session_ids)
+        _sessions_changed(app, body.session_ids)
+        return {"purged": body.session_ids}
+
+    @app.post("/api/sessions/{session_id}/summarize", response_model=HoneyOut)
+    async def summarize(session_id: str) -> HoneyOut:
+        try:
+            path = await _make_honey(app, session_id)
+        except RuntimeError as exc:
+            raise HTTPException(502, f"summarizer failed: {exc}") from exc
+        _session_changed(app, session_id)
+        return HoneyOut(path=str(path), text=path.read_text())
+
+    @app.get("/api/sessions/{session_id}/honey", response_class=PlainTextResponse)
+    async def honey(session_id: str) -> PlainTextResponse:
+        row = app.state.db.execute("SELECT honey FROM sessions WHERE id=?", (session_id,)).fetchone()
+        if row is None:
+            raise UnknownId(session_id)
+        if not row["honey"] or not Path(row["honey"]).is_file():
+            raise HTTPException(404, "no honey for this session")
+        return PlainTextResponse(Path(row["honey"]).read_text(), media_type="text/markdown")
+
+    @app.post("/api/sessions/{session_id}/restore", response_model=SessionOut)
+    async def restore(session_id: str) -> SessionOut:
+        keeper.restore(app.state.db, session_id)
+        return _session_changed(app, session_id)
+
+    @app.post("/api/scores/recompute")
+    async def recompute() -> dict[str, int]:
+        return {"rescored": keeper.recompute_scores(app.state.db)}
+
     @app.get("/api/settings")
     async def settings() -> dict[str, Any]:
         return curation.get_settings(app.state.db)
@@ -223,6 +292,14 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     _mount_ui(app)
     return app
+
+
+async def _make_honey(app: FastAPI, session_id: str) -> Path:
+    """The summarizer runs in a worker thread; the database is only touched from the loop thread."""
+    config = app.state.config
+    prompt, text = keeper.summary_input(app.state.db, config, session_id)
+    body = await asyncio.to_thread(app.state.summarizer, prompt, text)
+    return keeper.write_honey(app.state.db, config, session_id, body)
 
 
 def _group_changed(app: FastAPI, group_id: str, session_ids: list[str]) -> Group:

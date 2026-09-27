@@ -159,11 +159,21 @@ def extract(path: Path, max_chars: int) -> str:
 
 def summarize(conn: sqlite3.Connection, config: Config, session_id: str, summarizer: Summarizer) -> Path:
     """Write the honey for a session next to where its archive lives (or would live) and remember the path."""
+    prompt, text = summary_input(conn, config, session_id)
+    return write_honey(conn, config, session_id, summarizer(prompt, text))
+
+
+def summary_input(conn: sqlite3.Connection, config: Config, session_id: str) -> tuple[str, str]:
+    """The prompt and the session's extract. Reads only, so the summarizer can run on another thread."""
     row = _row(conn, session_id)
     transcript = Path(row["transcript"])
     if not transcript.is_file():
         raise FileNotFoundError(f"transcript missing for {session_id}: {transcript}")
-    body = summarizer(SUMMARY_PROMPT, extract(transcript, config.keeper.summary_max_chars))
+    return SUMMARY_PROMPT, extract(transcript, config.keeper.summary_max_chars)
+
+
+def write_honey(conn: sqlite3.Connection, config: Config, session_id: str, body: str) -> Path:
+    row = _row(conn, session_id)
     home = config.paths.archive_dir / row["repo_name"]
     home.mkdir(parents=True, exist_ok=True)
     path = home / f"{session_id}.md"
