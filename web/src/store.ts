@@ -11,7 +11,10 @@ export type Dialog =
   | { kind: "world" }
   | { kind: "honey"; id: string }
   | { kind: "purge"; id: string }
+  | { kind: "summarize"; id: string }
   | { kind: "color"; gid: string };
+
+export type CameraRequest = { kind: "session"; id: string } | { kind: "group"; gid: string } | { kind: "overview" } | { kind: "top" };
 
 export interface ApiaryState {
   sessions: Record<string, Session>;
@@ -24,6 +27,7 @@ export interface ApiaryState {
   threshold: number; world: string; collapsed: Record<string, boolean>;
   selected: Set<string>; focusGroup: string | null; focusSession: string | null; hover: string | null;
   toast: string | null; dialog: Dialog | null; keeperBusy: boolean;
+  camera: { seq: number; req: CameraRequest | null }; cameraTarget: { x: number; z: number };
 
   load(): Promise<void>;
   applyEvent(ev: ApiEvent): void;
@@ -31,7 +35,8 @@ export interface ApiaryState {
   select(id: string, additive: boolean): void;
   clearSelection(): void;
   setHover(id: string | null): void;
-  setFocus(group: string | null, session: string | null): void;
+  setFocus(group: string | null, session: string | null, target?: { x: number; z: number }): void;
+  requestCamera(req: CameraRequest): void;
   setTab(tab: "sessions" | "gc"): void;
   setLens(lens: Lens): void;
   setSort(sort: SortKey): void;
@@ -125,6 +130,7 @@ export function createApiaryStore(api: ApiClient): ApiaryStore {
       threshold: 35, world: "#f4f6f8", collapsed: {},
       selected: new Set(), focusGroup: null, focusSession: null, hover: null,
       toast: null, dialog: null, keeperBusy: false,
+      camera: { seq: 0, req: null }, cameraTarget: { x: 0, z: 0 },
 
       async load() {
         try {
@@ -165,7 +171,8 @@ export function createApiaryStore(api: ApiClient): ApiaryStore {
       },
       clearSelection() { set({ selected: new Set() }); },
       setHover(id) { if (get().hover !== id) set({ hover: id }); },
-      setFocus(group, session) { set({ focusGroup: group, focusSession: session }); },
+      setFocus(group, session, target) { set((st) => ({ focusGroup: group, focusSession: session, cameraTarget: target ?? st.cameraTarget })); },
+      requestCamera(req) { set((st) => ({ camera: { seq: st.camera.seq + 1, req } })); },
       setTab(tab) { set(tab === "gc" ? { tab, lens: "score" } : { tab }); },
       setLens(lens) { set({ lens }); },
       setSort(sort) { set({ sort }); },
