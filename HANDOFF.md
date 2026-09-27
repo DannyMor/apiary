@@ -1,4 +1,4 @@
-# Handoff — where Apiary stands (25 Sep 2026)
+# Handoff — where Apiary stands (27 Sep 2026)
 
 ## Repo
 
@@ -6,10 +6,11 @@
 account; CLAUDE.md has the account rules). Author on every commit is
 `Danny Mor <19153512+DannyMor@users.noreply.github.com>`. `git log` tells the story: plan,
 skeleton, prototype, indexer, guidance, the indexer fixes, stage 5 (watcher + events), stage 6
-(swarms, tags, decisions, settings, colors), stage 7 part one (the prototype runs on the API).
+(swarms, tags, decisions, settings, colors), stage 7 part one (the prototype runs on the API),
+stage 8 (the keeper: archive, honey, restore, purge).
 
 `uv sync && uv run pytest -q && uv run ruff check . && uv run ruff format --check .` all pass
-(44 tests). Python 3.12.12 via uv. `uv run apiary serve` then open http://127.0.0.1:7431;
+(57 tests). Python 3.12.12 via uv. `uv run apiary serve` then open http://127.0.0.1:7431;
 `.claude/launch.json` starts the same for the in-app browser.
 
 ## What exists
@@ -23,8 +24,9 @@ skeleton, prototype, indexer, guidance, the indexer fixes, stage 5 (watcher + ev
   (`Hub`, `Watcher`: re-index on file events and on a 30s tick, publish events),
   `curation.py` (swarms, tags, decisions, settings: the writes a person makes; raises
   `UnknownId` → 404 and `RepoHive` → 409), `colors.py` (OKLCH suggestions ported from the
-  prototype), `api.py` (everything under `/api`, `WS /api/events`, serves the UI at `/`),
-  `cli.py`.
+  prototype), `keeper.py` (archive, honey, restore, purge, score recompute; `Summarizer`
+  protocol with `ClaudeCli`), `api.py` (everything under `/api`, `WS /api/events`, serves the
+  UI at `/`), `cli.py`.
 - `tests/`: 43 tests built from the real transcript shapes (`tests/fixtures.py` writes
   plain, forked, preambled and custom-titled transcripts). `tests/test_watcher.py` drives a
   real `watchfiles` watcher on a temp dir; the API tests read the websocket.
@@ -131,6 +133,39 @@ member; hives can be renamed and recolored but not dissolved or edited; keeper b
 record a decision (`marked: archive`, with Undo) because applying is stage 8; the row meta
 shows the worktree name when there is one.
 
+## Stage 8: the keeper (done 27 Sep 2026)
+
+- **Archive** (`keeper.archive`) moves every file named `<id>.jsonl` under `claude_dir`
+  (relocated copies too) into `archive_dir/<repo>/` and records the moves in
+  `sessions.archived_from` (schema v3, with `sessions.honey`). Claude Code lists sessions from
+  those files, so this is what removes a session from `claude --resume`. The indexer neither
+  re-indexes nor purges archived sessions. **Restore** moves the files back exactly (mtime
+  kept), sets idle, clears the decision. **Purge** deletes archived transcripts only, honey
+  stays, explicit ids required, 409 on anything not archived.
+- **Honey** (`keeper.summarize` = `summary_input` + `write_honey`): `extract()` turns the
+  transcript into prompts, replies and one line per tool call (own records only, no isMeta,
+  no tool results, capped by `summary_max_chars`); the `Summarizer` gets the prompt as its
+  last argument and the extract on stdin. `ClaudeCli` runs `[keeper] summarizer`, default
+  `claude -p --no-session-persistence --output-format text` (without the flag every keeper run
+  became a session of its own; two such strays from this machine are archived under
+  `archive/apiary/`, purge or restore them from the Archive section). The API runs the
+  summarizer in a worker thread; the database stays on the loop thread.
+- **Endpoints:** `POST /api/gc/apply` (every pending decision, honey first for
+  summarize_archive, one failure reported per session without stopping the rest),
+  `POST /api/gc/purge {session_ids}`, `POST /api/sessions/{id}/summarize`,
+  `GET /api/sessions/{id}/honey` (text/markdown), `POST /api/sessions/{id}/restore`,
+  `POST /api/scores/recompute`. `SessionOut.has_honey`.
+- **Prototype:** Keeper tab has "Apply N marks"; Archive rows offer Honey, Restore, Purge
+  (confirmed in a dialog); a hive whose every cell is archived leaves the world.
+
+Verified: 57 tests; in the browser against the real database with a stand-in summarizer
+(`--config` pointing at a toml whose `[keeper] summarizer` is a shell one-liner): mark →
+apply → Archive section → honey with front matter → restore, transcript back with its
+original mtime. **Not verified: a real `claude -p` run.** The CLI in the session that built
+this failed to authenticate ("OAuth session expired") and its default model printed a
+retirement warning; on a logged-in machine it should just work, or set
+`summarizer = "claude -p --no-session-persistence --output-format text --model <id>"`.
+
 ## Decisions already made (don't reopen without reason)
 
 - White world, camera-relative everything, no fog; unlit floor with a shadow layer.
@@ -143,7 +178,7 @@ shows the worktree name when there is one.
 ## Next
 
 Stage 7, part two: the React + TypeScript + Vite + react-three-fiber port under `web/`, one
-module at a time (api client from the OpenAPI schema, store, tray, world, keeper), built to
-`web/dist/` which `api.py` already serves when present; the prototype stays the reference.
-Stage 8: the keeper applies decisions (archive moves the transcript into `archive_dir`,
-summarize writes honey with `claude -p`, purge), `POST /api/gc/apply`, restore.
+module at a time (api client, store, tray, world, keeper), built to `web/dist/` which
+`api.py` already serves when present; the prototype stays the reference. Then: a scoring
+policy file (`GET/PUT /api/policy`), and incremental transcript parsing from a byte offset
+if live re-reads ever cost too much.

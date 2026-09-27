@@ -47,4 +47,4 @@ honey = the summary written when a cell is archived. The schema stays literal:
 
 1 plan ✓ · 2 skeleton ✓ · 3 prototype ✓ · 4 indexer ✓ · 5 watcher + live status ✓ ·
 6 groups/tags/decisions/settings in SQLite ✓ · 7 frontend wiring (prototype on the API ✓,
-React port pending) · 8 keeper: archive, summarise with `claude -p`, purge.
+React port pending) · 8 keeper: archive, honey with `claude -p`, restore, purge ✓.

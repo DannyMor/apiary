@@ -75,8 +75,7 @@ Modules under `src/apiary/`:
 | `indexer.py`    | walk `claude_dir`, one file per session, re-parse only what changed |
 | `watcher.py`    | file events → live status, incremental reindex, websocket push |
 | `scoring.py`    | features → weighted score + reasons, from a policy             |
-| `gc.py`         | archive / summarise / purge                                    |
-| `summarizer.py` | `claude -p` over a transcript with a fixed prompt              |
+| `keeper.py`     | archive / honey (`claude -p` over an extract) / restore / purge |
 | `api.py`        | routers over the above, static UI                              |
 
 ## Entities
@@ -85,7 +84,8 @@ Modules under `src/apiary/`:
 Session      id (transcript file stem), repo_path, repo_name, worktree, branch, title,
              created_at, last_active_at, mtime, size_bytes, msg_count, tool_calls,
              files_edited, parent_id (session forked from),
-             status (live | idle | archived | purged)
+             status (live | idle | archived | purged),
+             archived_from (where the keeper moved the files), honey (summary path)
 Group        id, name, kind (repo | custom), color_oklch
 GroupMember  group_id, session_id
 Tag          session_id, tag
