@@ -166,3 +166,9 @@ def test_color_suggestions_avoid_existing_group_colors(config: Config) -> None:
 def test_root_answers_head_requests(config: Config) -> None:
     with TestClient(create_app(config)) as client:
         assert client.head("/").status_code == 200
+
+
+def test_prototype_stays_reachable_at_its_own_path(config: Config) -> None:
+    with TestClient(create_app(config)) as client:
+        r = client.get("/prototype")
+        assert r.status_code == 200 and "<title>Apiary" in r.text

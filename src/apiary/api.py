@@ -336,9 +336,15 @@ async def _until_closed(ws: WebSocket) -> None:
 
 
 def _mount_ui(app: FastAPI) -> None:
-    """Serve the built UI if present, else the prototype, else a hint."""
+    """Serve the built UI if present, else the prototype, else a hint. The prototype always has /prototype."""
     dist = WEB_DIR / "dist"
     proto = WEB_DIR / "prototype" / "apiary.html"
+    if proto.is_file():
+
+        @app.get("/prototype", include_in_schema=False)
+        async def prototype_page() -> FileResponse:
+            return FileResponse(proto)
+
     if dist.is_dir():
         app.mount("/", StaticFiles(directory=dist, html=True), name="ui")
     elif proto.is_file():
