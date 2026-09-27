@@ -1202,7 +1202,7 @@ function buildSections(){
   const gr = GROUPERS[state.groupBy];
   const byKey = new Map();
   for (const s of live){ const k = gr.key(s); let l = byKey.get(k); if (!l) byKey.set(k, l = []); l.push(s); }
-  if (state.groupBy === 'group') for (const gid of state.groupOrder) if (!byKey.has(gid) && state.groups[gid].kind === 'custom') byKey.set(gid, []);   // empty swarms still show
+  if (state.groupBy === 'group') for (const gid of state.groupOrder) if (!byKey.has(gid) && (state.groups[gid].kind === 'custom' || live.some(s => s.repo === gid))) byKey.set(gid, []);   // empty swarms still show; a hive shows while its cells are on loan
   return lastSections = [...byKey.keys()].sort(gr.order).map(k => ({
     id: state.groupBy + ':' + k, key: k, title: gr.title(k),
     rows: byKey.get(k).sort(cmp),
