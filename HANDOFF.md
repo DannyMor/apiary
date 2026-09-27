@@ -168,10 +168,14 @@ shows the worktree name when there is one.
 Verified: 57 tests; in the browser against the real database with a stand-in summarizer
 (`--config` pointing at a toml whose `[keeper] summarizer` is a shell one-liner): mark →
 apply → Archive section → honey with front matter → restore, transcript back with its
-original mtime. **Not verified: a real `claude -p` run.** The CLI in the session that built
-this failed to authenticate ("OAuth session expired") and its default model printed a
-retirement warning; on a logged-in machine it should just work, or set
-`summarizer = "claude -p --no-session-persistence --output-format text --model <id>"`.
+original mtime. **A real `claude -p` run is verified too** (27 Sep 2026, later): the daemon
+wrote honey for a 14-message session in 14 s, with front matter, `has_honey` true and no
+stray transcript. Two things had to be true first. The `claude` CLI must be logged in on its
+own (`claude auth status`; the desktop app's login is separate; `claude auth login` fixes it).
+And a daemon started from inside a Claude Code session inherits that session's
+`ANTHROPIC_MODEL` pin and nesting flags, which made `claude -p` exit on a retired model:
+`ClaudeCli` now runs the summarizer with those stripped (`own_cli_env`), keeping the person's
+own `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL` if set.
 
 ## Stage 7, part two: the React port (done 27 Sep 2026)
 
@@ -212,7 +216,7 @@ started on a color that collided with the first hive. Not covered by tests: the 
 
 ## Next
 
-Every stage in PLAN.md is built. What remains is optional: a scoring policy file
-(`GET/PUT /api/policy`, `POST /api/scores/recompute` already exists), incremental transcript
-parsing from a byte offset if live re-reads ever cost too much, code-splitting three.js out
-of the main chunk, and verifying a real `claude -p` honey on a logged-in machine.
+Every stage in PLAN.md is built and every path is verified, including a real `claude -p`
+honey. What remains is optional: a scoring policy file (`GET/PUT /api/policy`,
+`POST /api/scores/recompute` already exists), incremental transcript parsing from a byte
+offset if live re-reads ever cost too much, and code-splitting three.js out of the main chunk.
