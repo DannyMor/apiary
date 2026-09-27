@@ -1,4 +1,6 @@
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -172,3 +174,22 @@ def test_prototype_stays_reachable_at_its_own_path(config: Config) -> None:
     with TestClient(create_app(config)) as client:
         r = client.get("/prototype")
         assert r.status_code == 200 and "<title>Apiary" in r.text
+
+
+def test_sessions_carry_their_openings(config: Config, tmp_path: Path) -> None:
+    two_sessions(config)
+    registry = tmp_path / "registry" / "org" / "user"
+    registry.mkdir(parents=True)
+    (registry / "local_s1.json").write_text('{"sessionId": "local_s1", "cliSessionId": "s1"}')
+    cfg = replace(config, desktop_app=replace(config.desktop_app, registry_dir=tmp_path / "registry"))
+    with TestClient(create_app(cfg)) as client:
+        s1 = client.get("/api/sessions/s1").json()
+        assert s1["openings"] == [
+            {"label": "Open in Claude", "url": "claude://claude.ai/epitaxy/local_s1", "command": None},
+            {"label": "Resume in terminal", "url": None, "command": "claude --resume s1"},
+        ]
+        s2 = client.get("/api/sessions/s2").json()
+        assert [o["label"] for o in s2["openings"]] == ["Resume in terminal"]
+        client.post("/api/gc/decisions", json={"session_id": "s2", "decision": "archive"})
+        client.post("/api/gc/apply")
+        assert client.get("/api/sessions/s2").json()["openings"] == []

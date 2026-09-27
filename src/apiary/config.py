@@ -44,10 +44,23 @@ class Keeper:
 
 
 @dataclass(frozen=True)
+class DesktopApp:
+    """Where the Claude desktop app records its sessions, and how it opens one. App internals:
+    when an update moves them, change these here rather than in code."""
+
+    registry_dir: Path = field(
+        default_factory=lambda: _expand("~/Library/Application Support/Claude/claude-code-sessions")
+    )
+    transcript_key: str = "cliSessionId"  # the field of a registry file that names the transcript session
+    link: str = "claude://claude.ai/epitaxy/{app_session_id}"
+
+
+@dataclass(frozen=True)
 class Config:
     paths: Paths = field(default_factory=Paths)
     server: Server = field(default_factory=Server)
     keeper: Keeper = field(default_factory=Keeper)
+    desktop_app: DesktopApp = field(default_factory=DesktopApp)
     source: Path | None = None  # where this config was read from, if anywhere
 
     @classmethod
@@ -63,6 +76,7 @@ class Config:
         paths_raw = raw.get("paths", {})
         server_raw = raw.get("server", {})
         keeper_raw = raw.get("keeper", {})
+        desktop_raw = raw.get("desktop_app", {})
         paths = Paths(
             claude_dir=_expand(paths_raw.get("claude_dir", Paths().claude_dir)),
             db=_expand(paths_raw.get("db", Paths().db)),
@@ -79,7 +93,12 @@ class Config:
             summary_timeout_s=float(keeper_raw.get("summary_timeout_s", Keeper().summary_timeout_s)),
             summary_max_chars=int(keeper_raw.get("summary_max_chars", Keeper().summary_max_chars)),
         )
-        return cls(paths=paths, server=server, keeper=keeper, source=candidate)
+        desktop_app = DesktopApp(
+            registry_dir=_expand(desktop_raw.get("registry_dir", DesktopApp().registry_dir)),
+            transcript_key=str(desktop_raw.get("transcript_key", DesktopApp().transcript_key)),
+            link=str(desktop_raw.get("link", DesktopApp().link)),
+        )
+        return cls(paths=paths, server=server, keeper=keeper, desktop_app=desktop_app, source=candidate)
 
     def ensure_dirs(self) -> None:
         self.paths.db.parent.mkdir(parents=True, exist_ok=True)

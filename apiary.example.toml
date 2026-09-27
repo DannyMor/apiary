@@ -16,3 +16,10 @@ port = 7431
 summarizer = "claude -p --no-session-persistence --output-format text"
 summary_timeout_s = 240
 summary_max_chars = 60000
+
+[desktop_app]
+# How "Open in Claude" finds the desktop app's session for a transcript and links to it.
+# These are app internals; if an app update moves them, change them here.
+registry_dir = "~/Library/Application Support/Claude/claude-code-sessions"
+transcript_key = "cliSessionId"
+link = "claude://claude.ai/epitaxy/{app_session_id}"

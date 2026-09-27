@@ -35,6 +35,14 @@ class Session(BaseModel):
     worktree: str | None = None
 
 
+class Opening(BaseModel):
+    """One way to open a session outside Apiary: navigate to ``url`` or run ``command``."""
+
+    label: str
+    url: str | None = None
+    command: str | None = None
+
+
 class SessionOut(Session):
     """A session as served: the row plus what the UI needs alongside it."""
 
@@ -44,6 +52,7 @@ class SessionOut(Session):
     groups: list[str] = Field(default_factory=list)
     decision: Decision | None = None
     has_honey: bool = False
+    openings: list[Opening] = Field(default_factory=list)
 
 
 class Group(BaseModel):

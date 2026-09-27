@@ -26,6 +26,7 @@ from pathlib import Path
 from watchfiles import awatch
 
 from apiary.indexer import IndexReport, index_all
+from apiary.openers import Opener
 from apiary.queries import fetch_session
 
 TICK_SECONDS = 30.0
@@ -58,10 +59,12 @@ class Watcher:
         *,
         tick_seconds: float = TICK_SECONDS,
         debounce_ms: int = DEBOUNCE_MS,
+        openers: list[Opener] | None = None,
     ) -> None:
         self.conn = conn
         self.claude_dir = claude_dir
         self.hub = hub
+        self.openers = openers or []
         self.tick_seconds = tick_seconds
         self.debounce_ms = debounce_ms
         self.last = IndexReport()
@@ -70,11 +73,13 @@ class Watcher:
 
     def run_once(self, now: float | None = None) -> IndexReport:
         report = index_all(self.conn, self.claude_dir, now)
+        for opener in self.openers:
+            opener.refresh()
         live = self._live_ids()
         flipped = live ^ self._live
         self._live = live
         for session_id in [*report.changed, *sorted(flipped - set(report.changed))]:
-            session = fetch_session(self.conn, session_id)
+            session = fetch_session(self.conn, session_id, self.openers)
             if session:
                 self.hub.publish({"type": "session.updated", "session": session.model_dump()})
         for session_id in sorted(flipped):

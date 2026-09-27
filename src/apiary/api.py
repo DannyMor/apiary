@@ -38,6 +38,7 @@ from apiary.models import (
     TagCount,
     TagIn,
 )
+from apiary.openers import ClaudeCliOpener, ClaudeDesktopOpener, Opener
 from apiary.queries import SESSION_SQL, fetch_group, fetch_groups, fetch_session, session_out
 from apiary.watcher import Hub, Watcher
 
@@ -51,18 +52,24 @@ SORTS = {
 }
 
 
-def create_app(config: Config | None = None, summarizer: Summarizer | None = None) -> FastAPI:
+def create_app(
+    config: Config | None = None, summarizer: Summarizer | None = None, openers: list[Opener] | None = None
+) -> FastAPI:
     config = config or Config.load()
     config.ensure_dirs()
     summarizer = summarizer or ClaudeCli(config.keeper.summarizer, config.keeper.summary_timeout_s)
+    if openers is None:
+        d = config.desktop_app
+        openers = [ClaudeDesktopOpener(d.registry_dir, d.transcript_key, d.link), ClaudeCliOpener()]
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.config = config
         app.state.summarizer = summarizer
+        app.state.openers = openers
         app.state.db = connect(config.paths.db)
         app.state.hub = Hub()
-        app.state.watcher = Watcher(app.state.db, config.paths.claude_dir, app.state.hub)
+        app.state.watcher = Watcher(app.state.db, config.paths.claude_dir, app.state.hub, openers=openers)
         app.state.watcher.run_once()
         watching = asyncio.create_task(app.state.watcher.run())
         try:
@@ -147,11 +154,11 @@ def create_app(config: Config | None = None, summarizer: Summarizer | None = Non
             f"""{SESSION_SQL} WHERE {" AND ".join(where)} ORDER BY {SORTS[sort]} LIMIT ?""",
             [*args, limit],
         ).fetchall()
-        return [session_out(app.state.db, r) for r in rows]
+        return [session_out(app.state.db, r, app.state.openers) for r in rows]
 
     @app.get("/api/sessions/{session_id}", response_model=SessionOut)
     async def session(session_id: str) -> SessionOut:
-        found = fetch_session(app.state.db, session_id)
+        found = fetch_session(app.state.db, session_id, app.state.openers)
         if found is None:
             raise HTTPException(404, "no such session")
         return found
@@ -213,7 +220,10 @@ def create_app(config: Config | None = None, summarizer: Summarizer | None = Non
 
     @app.get("/api/gc/candidates", response_model=list[SessionOut])
     async def gc_candidates(threshold: int = Query(35, ge=0, le=100)) -> list[SessionOut]:
-        found = (fetch_session(app.state.db, sid) for sid in curation.candidate_ids(app.state.db, threshold))
+        found = (
+            fetch_session(app.state.db, sid, app.state.openers)
+            for sid in curation.candidate_ids(app.state.db, threshold)
+        )
         return [s for s in found if s is not None]
 
     @app.post("/api/gc/decisions", response_model=SessionOut)
@@ -317,7 +327,7 @@ def _sessions_changed(app: FastAPI, session_ids: list[str]) -> None:
 
 
 def _session_changed(app: FastAPI, session_id: str) -> SessionOut:
-    session = fetch_session(app.state.db, session_id)
+    session = fetch_session(app.state.db, session_id, app.state.openers)
     if session is None:
         raise UnknownId(session_id)
     app.state.hub.publish({"type": "session.updated", "session": session.model_dump()})

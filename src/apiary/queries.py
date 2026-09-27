@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Sequence
+from typing import Protocol
 
-from apiary.models import Group, Session, SessionOut
+from apiary.models import Group, Opening, Session, SessionOut
 
 SESSION_SQL = (
     "SELECT s.*, sc.score, sc.reasons, d.decision FROM sessions s "
@@ -17,7 +19,11 @@ def session_of(row: sqlite3.Row) -> Session:
     return Session(**{k: row[k] for k in Session.model_fields})
 
 
-def session_out(conn: sqlite3.Connection, row: sqlite3.Row) -> SessionOut:
+class Opens(Protocol):
+    def openings(self, session_id: str) -> list[Opening]: ...
+
+
+def session_out(conn: sqlite3.Connection, row: sqlite3.Row, openers: Sequence[Opens] = ()) -> SessionOut:
     base = session_of(row)
     tags = [
         r["tag"] for r in conn.execute("SELECT tag FROM tags WHERE session_id=? ORDER BY tag", (row["id"],))
@@ -34,12 +40,17 @@ def session_out(conn: sqlite3.Connection, row: sqlite3.Row) -> SessionOut:
         groups=groups,
         decision=row["decision"],
         has_honey=bool(row["honey"]),
+        openings=[]
+        if base.status in ("archived", "purged")
+        else [o for op in openers for o in op.openings(base.id)],
     )
 
 
-def fetch_session(conn: sqlite3.Connection, session_id: str) -> SessionOut | None:
+def fetch_session(
+    conn: sqlite3.Connection, session_id: str, openers: Sequence[Opens] = ()
+) -> SessionOut | None:
     row = conn.execute(f"{SESSION_SQL} WHERE s.id=?", (session_id,)).fetchone()
-    return session_out(conn, row) if row else None
+    return session_out(conn, row, openers) if row else None
 
 
 def fetch_group(conn: sqlite3.Connection, group_id: str) -> Group | None:
