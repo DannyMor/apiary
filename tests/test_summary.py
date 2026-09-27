@@ -61,3 +61,21 @@ def test_claude_cli_pipes_the_extract_and_returns_stdout() -> None:
         ["python3", "-c", "import sys; print('SUM:' + sys.stdin.read()[:5] + '|' + sys.argv[1])"], 10
     )
     assert cli("the prompt", "extract text") == "SUM:extra|the prompt"
+
+
+def test_claude_cli_runs_as_the_persons_own_cli(monkeypatch) -> None:
+    monkeypatch.setenv("ANTHROPIC_MODEL", "us.anthropic.claude-retired")
+    monkeypatch.setenv("ANTHROPIC_SMALL_FAST_MODEL", "us.anthropic.claude-retired")
+    monkeypatch.setenv("CLAUDECODE", "1")
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "host-session")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "keep-me")
+    cli = keeper.ClaudeCli(
+        [
+            "python3",
+            "-c",
+            "import os; print(' '.join(os.environ.get(k, 'unset') for k in ('ANTHROPIC_MODEL', "
+            "'ANTHROPIC_SMALL_FAST_MODEL', 'CLAUDECODE', 'CLAUDE_CODE_SESSION_ID', 'ANTHROPIC_API_KEY')))",
+        ],
+        10,
+    )
+    assert cli("prompt", "extract") == "unset unset unset unset keep-me"

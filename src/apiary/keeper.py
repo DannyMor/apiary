@@ -9,6 +9,7 @@ is moved, and ``sessions.archived_from`` remembers where each came from.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sqlite3
 import subprocess
@@ -36,6 +37,21 @@ class Summarizer(Protocol):
     def __call__(self, prompt: str, extract: str) -> str: ...
 
 
+# A daemon started from inside a Claude Code session inherits that session's nesting flags and
+# model pins; the keeper's claude -p must run as the person's own CLI, so these never reach it.
+# Auth configuration (ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL) is the person's and is kept.
+HOST_SESSION_VARS = ("CLAUDECODE", "ANTHROPIC_MODEL", "ANTHROPIC_SMALL_FAST_MODEL")
+HOST_SESSION_PREFIX = "CLAUDE_CODE_"
+
+
+def own_cli_env() -> dict[str, str]:
+    return {
+        k: v
+        for k, v in os.environ.items()
+        if k not in HOST_SESSION_VARS and not k.startswith(HOST_SESSION_PREFIX)
+    }
+
+
 class ClaudeCli:
     """Runs ``<command> <prompt>`` with the extract on stdin and returns stdout; ``claude -p`` by default."""
 
@@ -45,10 +61,16 @@ class ClaudeCli:
 
     def __call__(self, prompt: str, extract: str) -> str:
         done = subprocess.run(
-            [*self.command, prompt], input=extract, capture_output=True, text=True, timeout=self.timeout_s
+            [*self.command, prompt],
+            input=extract,
+            capture_output=True,
+            text=True,
+            timeout=self.timeout_s,
+            env=own_cli_env(),
         )
         if done.returncode != 0:
-            raise RuntimeError(f"{self.command[0]} exited {done.returncode}: {done.stderr.strip()[:500]}")
+            said = " ".join(part.strip() for part in (done.stderr, done.stdout) if part.strip())
+            raise RuntimeError(f"{self.command[0]} exited {done.returncode}: {said[:500]}")
         return done.stdout.strip()
 
 
