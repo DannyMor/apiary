@@ -137,9 +137,10 @@ interaction: recency/score height lenses, click-to-focus camera, tray with
 group-by / order-by / filters, labels, custom groups, the GC flow, world color.
 Since stage 7 it runs on the API and the websocket instead of mock data.
 
-The production UI will be React + TypeScript + Vite with react-three-fiber and
-Zustand, built to `web/dist/` and served by the same daemon. It ports the
-prototype one module at a time, replacing mock data with the API.
+The production UI is React + TypeScript + Vite with Zustand under `web/`, built to
+`web/dist/` and served by the same daemon; the three.js world is an imperative
+`WorldEngine` class driven by the store rather than react-three-fiber. It ports the
+prototype module by module; the prototype stays at `/prototype` as the reference.
 
 ## Build order
 

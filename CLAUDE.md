@@ -36,10 +36,11 @@ honey = the summary written when a cell is archived. The schema stays literal:
 - CLI is typer: `apiary serve`, `apiary index`, `apiary config`.
 - Tests use synthetic transcripts from `tests/fixtures.py`; keep the indexer defensive
   (the transcript format is observed, not specified).
-- The UI reference is `web/prototype/apiary.html` (plain three.js, live on the API since
-  stage 7; no test harness, verify it in the browser against `apiary serve`). The
-  production UI will be React + TypeScript + Vite + react-three-fiber under `web/`,
-  built to `web/dist/`, served by the daemon. Port the prototype one module at a time.
+- The UI is `web/`: React 19 + TypeScript + Vite + Zustand, with three.js in an imperative
+  `WorldEngine` (not react-three-fiber). `cd web && npm test && npm run build` must pass;
+  `web/dist` is served by the daemon at `/` and is not committed. The prototype
+  `web/prototype/apiary.html` (served at `/prototype`) stays the visual reference: when the
+  two disagree about look or behavior, the prototype wins until the difference is deliberate.
 - Commit in stages with clear messages, one concern per commit. The first four commits
   (plan, skeleton, prototype, indexer) set the pattern.
 
@@ -47,4 +48,4 @@ honey = the summary written when a cell is archived. The schema stays literal:
 
 1 plan ✓ · 2 skeleton ✓ · 3 prototype ✓ · 4 indexer ✓ · 5 watcher + live status ✓ ·
 6 groups/tags/decisions/settings in SQLite ✓ · 7 frontend wiring (prototype on the API ✓,
-React port pending) · 8 keeper: archive, honey with `claude -p`, restore, purge ✓.
+React port ✓) · 8 keeper: archive, honey with `claude -p`, restore, purge ✓.

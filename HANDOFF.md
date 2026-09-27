@@ -7,10 +7,10 @@ account; CLAUDE.md has the account rules). Author on every commit is
 `Danny Mor <19153512+DannyMor@users.noreply.github.com>`. `git log` tells the story: plan,
 skeleton, prototype, indexer, guidance, the indexer fixes, stage 5 (watcher + events), stage 6
 (swarms, tags, decisions, settings, colors), stage 7 part one (the prototype runs on the API),
-stage 8 (the keeper: archive, honey, restore, purge).
+stage 8 (the keeper: archive, honey, restore, purge), stage 7 part two (the React port).
 
 `uv sync && uv run pytest -q && uv run ruff check . && uv run ruff format --check .` all pass
-(57 tests). Python 3.12.12 via uv. `uv run apiary serve` then open http://127.0.0.1:7431;
+(58 tests); `cd web && npm install && npm test && npm run build` (23 tests, tsc, vite). Python 3.12.12 via uv. `uv run apiary serve` then open http://127.0.0.1:7431;
 `.claude/launch.json` starts the same for the in-app browser.
 
 ## What exists
@@ -30,8 +30,15 @@ stage 8 (the keeper: archive, honey, restore, purge).
 - `tests/`: 43 tests built from the real transcript shapes (`tests/fixtures.py` writes
   plain, forked, preambled and custom-titled transcripts). `tests/test_watcher.py` drives a
   real `watchfiles` watcher on a temp dir; the API tests read the websocket.
-- `web/prototype/apiary.html`: the complete UI, live on the daemon's data since stage 7
-  (see its README for the rules). No test harness: it is verified in the browser.
+- `web/prototype/apiary.html`: the single-file UI, live on the daemon's data, served at
+  `/prototype`. It stays the visual reference. No test harness: verified in the browser.
+- `web/src/`: the React port (React 19, TypeScript, Vite 8, Zustand 5, three r186). `api/`
+  (`ApiClient` interface, `HttpApi`, `FakeApi` in-memory double), `model.ts`, `lib/`
+  (color, hex, time, sections, layout: pure, tested), `store.ts` (the mirror of the daemon
+  and every mutation), `world/engine.ts` (the three.js scene) + `World.tsx`, `components/`
+  (tray, sessions list, keeper, overlay, minimap, dialogs). `npm run build` writes `web/dist`
+  (not committed), which the daemon serves at `/` when present; `npm run dev` on 5173 proxies
+  `/api` to the daemon on 7431. `.claude/launch.json` has `apiary` and `apiary-web`.
 
 ## How the indexer models a session (verified against `~/.claude/projects`, 24 Sep 2026)
 
@@ -166,6 +173,34 @@ this failed to authenticate ("OAuth session expired") and its default model prin
 retirement warning; on a logged-in machine it should just work, or set
 `summarizer = "claude -p --no-session-persistence --output-format text --model <id>"`.
 
+## Stage 7, part two: the React port (done 27 Sep 2026)
+
+One store, one engine, React around them. The store (`createApiaryStore(api)`) holds the
+mirror of the daemon (sessions, groups in hive-then-swarm order, settings), the view state
+(tab, lens, sort, grouping, filter, selection, focus, hover, dialogs) and every mutation,
+each of which goes through the `ApiClient` and then refreshes the sessions involved; the
+websocket feeds `applyEvent`. `World.tsx` computes the layout (`lib/layout.ts`) and feeds
+the `WorldEngine`, which owns the renderer and the frame loop; picks, hovers and camera
+moves come back through the store (`requestCamera`). Components read the store with
+`useApiary(selector)`; derived lists live in `derived.ts`.
+
+Not react-three-fiber, deliberately: the selective glow (render the running columns alone,
+blur at half resolution, composite as a veil), the height-in-the-vertex-shader instancing
+and the material swaps are render-loop code that reads better as one class than as
+declarative scene graph plus escape hatches. Wrapping the engine in an r3f `Canvas` later is
+possible; nothing depends on it. three r186 differences from the prototype's r128: color
+management is on (no manual sRGB conversions), `samples: 4` on the render target instead of
+`WebGLMultisampleRenderTarget`, `colorSpace` instead of `encoding`.
+
+Verified: 23 Vitest tests (pure modules, store with the in-memory API, tray and keeper with
+testing-library); in the browser against the real daemon: the world renders like the
+prototype, select and shift-select, focus, new swarm through the dialog (suggested color,
+members from the selection), edit and dissolve, keeper candidates, the production build
+served by the daemon at `/`, `/prototype` still there. Two prototype bugs were found and
+fixed on the way: a hive whose every cell is on loan vanished from the tray; new swarms
+started on a color that collided with the first hive. Not covered by tests: the engine
+(WebGL has no jsdom). The bundle is one 860 KB chunk (three.js); code-split if it matters.
+
 ## Decisions already made (don't reopen without reason)
 
 - White world, camera-relative everything, no fog; unlit floor with a shadow layer.
@@ -177,8 +212,7 @@ retirement warning; on a logged-in machine it should just work, or set
 
 ## Next
 
-Stage 7, part two: the React + TypeScript + Vite + react-three-fiber port under `web/`, one
-module at a time (api client, store, tray, world, keeper), built to `web/dist/` which
-`api.py` already serves when present; the prototype stays the reference. Then: a scoring
-policy file (`GET/PUT /api/policy`), and incremental transcript parsing from a byte offset
-if live re-reads ever cost too much.
+Every stage in PLAN.md is built. What remains is optional: a scoring policy file
+(`GET/PUT /api/policy`, `POST /api/scores/recompute` already exists), incremental transcript
+parsing from a byte offset if live re-reads ever cost too much, code-splitting three.js out
+of the main chunk, and verifying a real `claude -p` honey on a logged-in machine.
