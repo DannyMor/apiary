@@ -1,0 +1,15 @@
+export const Icon = {
+  sessions: () => <svg viewBox="0 0 16 16"><path d="M8 1.5l3 1.7v3.6L8 8.5 5 6.8V3.2zM3 6l3 1.7v3.6L3 13 0 11.3V7.7zM13 6l3 1.7v3.6L13 13l-3-1.7V7.7z" transform="translate(0 1)" /></svg>,
+  keeper: () => <svg viewBox="0 0 16 16"><path d="M2.5 4.5h11M6 4.5V3h4v1.5M4 4.5l.8 9h6.4l.8-9M6.5 7v4.5M9.5 7v4.5" /></svg>,
+  recency: () => <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" /><path d="M8 4.5V8l2.5 1.5" /></svg>,
+  score: () => <svg viewBox="0 0 16 16"><path d="M2 13.5h12M4 13.5V9M8 13.5V4M12 13.5V7" /></svg>,
+  search: () => <svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" /><path d="M10.5 10.5L14 14" /></svg>,
+  filter: () => <svg viewBox="0 0 16 16"><path d="M2 4h12M4.5 8h7M7 12h2" /></svg>,
+  swarm: () => <svg viewBox="0 0 16 16"><path d="M8 1.5l5.6 3.25v6.5L8 14.5l-5.6-3.25v-6.5z" /><path d="M8 5.5v5M5.5 8h5" /></svg>,
+  groupby: () => <svg viewBox="0 0 16 16"><path d="M2 3.5h12M2 8h12M2 12.5h7" /></svg>,
+  sort: () => <svg viewBox="0 0 16 16"><path d="M5 2.5v11M5 13.5L2.5 11M5 13.5L7.5 11M10 4h4M10 8h3M10 12h2" /></svg>,
+  edit: () => <svg viewBox="0 0 16 16"><path d="M11.5 2.5l2 2L5 13H3v-2zM10 4l2 2" /></svg>,
+  checkAll: () => <svg viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2" fill="currentColor" stroke="none" /><path d="M5 8l2 2 4-4" stroke="var(--panel)" strokeWidth="1.6" /></svg>,
+  checkSome: () => <svg viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2" /><path d="M5 8h6" strokeWidth="1.8" /></svg>,
+  checkNone: () => <svg viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2" /></svg>,
+};
