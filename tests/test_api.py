@@ -193,3 +193,19 @@ def test_sessions_carry_their_openings(config: Config, tmp_path: Path) -> None:
         client.post("/api/gc/decisions", json={"session_id": "s2", "decision": "archive"})
         client.post("/api/gc/apply")
         assert client.get("/api/sessions/s2").json()["openings"] == []
+
+
+def test_open_launches_the_first_url_opening_on_this_machine(config: Config, tmp_path: Path) -> None:
+    two_sessions(config)
+    registry = tmp_path / "registry" / "org" / "user"
+    registry.mkdir(parents=True)
+    (registry / "local_s1.json").write_text('{"sessionId": "local_s1", "cliSessionId": "s1"}')
+    cfg = replace(config, desktop_app=replace(config.desktop_app, registry_dir=tmp_path / "registry"))
+    launched: list[str] = []
+    with TestClient(create_app(cfg, launcher=launched.append)) as client:
+        assert client.post("/api/sessions/s1/open").status_code == 204
+        assert launched == ["claude://claude.ai/epitaxy/local_s1"]
+        assert (
+            client.post("/api/sessions/s2/open").status_code == 409
+        )  # only a command to copy, nothing to launch
+        assert client.post("/api/sessions/nope/open").status_code == 404

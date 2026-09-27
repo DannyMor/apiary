@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -38,7 +39,7 @@ from apiary.models import (
     TagCount,
     TagIn,
 )
-from apiary.openers import ClaudeCliOpener, ClaudeDesktopOpener, Opener
+from apiary.openers import ClaudeCliOpener, ClaudeDesktopOpener, Opener, platform_launch
 from apiary.queries import SESSION_SQL, fetch_group, fetch_groups, fetch_session, session_out
 from apiary.watcher import Hub, Watcher
 
@@ -53,7 +54,10 @@ SORTS = {
 
 
 def create_app(
-    config: Config | None = None, summarizer: Summarizer | None = None, openers: list[Opener] | None = None
+    config: Config | None = None,
+    summarizer: Summarizer | None = None,
+    openers: list[Opener] | None = None,
+    launcher: Callable[[str], None] = platform_launch,
 ) -> FastAPI:
     config = config or Config.load()
     config.ensure_dirs()
@@ -285,6 +289,18 @@ def create_app(
     async def restore(session_id: str) -> SessionOut:
         keeper.restore(app.state.db, session_id)
         return _session_changed(app, session_id)
+
+    @app.post("/api/sessions/{session_id}/open", status_code=204)
+    async def open_session(session_id: str) -> Response:
+        """Open the session where it lives, from this machine: the browser may not forward claude:// links."""
+        session = fetch_session(app.state.db, session_id, app.state.openers)
+        if session is None:
+            raise UnknownId(session_id)
+        url = next((o.url for o in session.openings if o.url), None)
+        if url is None:
+            raise HTTPException(409, "nothing to open for this session from here")
+        await asyncio.to_thread(launcher, url)
+        return Response(status_code=204)
 
     @app.post("/api/scores/recompute")
     async def recompute() -> dict[str, int]:

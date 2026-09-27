@@ -8,12 +8,14 @@ CLI's ``--resume`` is another. Add a class here to offer a new place, nothing el
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 from typing import Protocol
 
 from apiary.models import Opening
 
-__all__ = ["ClaudeCliOpener", "ClaudeDesktopOpener", "Opener", "Opening", "openings_for"]
+__all__ = ["ClaudeCliOpener", "ClaudeDesktopOpener", "Opener", "Opening", "openings_for", "platform_launch"]
 
 
 class Opener(Protocol):
@@ -62,3 +64,15 @@ class ClaudeCliOpener:
 
 def openings_for(openers: list[Opener], session_id: str) -> list[Opening]:
     return [o for opener in openers for o in opener.openings(session_id)]
+
+
+def platform_launch(url: str) -> None:
+    """Hand a url to the operating system, which routes custom schemes to the app that registered them."""
+    if sys.platform == "darwin":
+        subprocess.run(["open", url], check=True, timeout=10)
+    elif sys.platform.startswith("linux"):
+        subprocess.run(["xdg-open", url], check=True, timeout=10)
+    else:
+        import os
+
+        os.startfile(url)  # type: ignore[attr-defined]  # Windows only
