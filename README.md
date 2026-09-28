@@ -15,16 +15,17 @@ See [PLAN.md](PLAN.md) for the architecture and the build order.
 
 ## Run it
 
-    uv sync
-    uv run apiary index      # reads ~/.claude/projects into ~/.local/share/apiary/apiary.db
-    uv run apiary serve      # http://127.0.0.1:7431
+    make run                 # installs what is missing, builds the UI if stale, serves http://127.0.0.1:7431
 
-The daemon serves the React UI from `web/dist` when it exists (`cd web && npm install && npm run build`),
-and the single-file prototype at `/prototype` either way. Copy `apiary.example.toml` to
-`~/.config/apiary/apiary.toml` to change paths or the keeper's summarizer command.
+Needs `uv` and `npm` (`brew install uv node`); `make` tells you if one is missing. `make help` lists the
+rest: `make dev` (daemon plus Vite with hot reload on 5173), `make test`, `make index`, `make config`,
+`make open`. `PORT=8000 make run` changes the port.
+
+By hand: `uv sync`, `uv run apiary index`, `uv run apiary serve`; `cd web && npm ci && npm run build`
+for the UI. The daemon serves the React UI from `web/dist` when it exists and the single-file prototype
+at `/prototype` either way. Copy `apiary.example.toml` to `~/.config/apiary/apiary.toml` to change paths,
+the keeper's summarizer command or the desktop-app link settings.
 
 A session's row (and a double-click on its cell) opens it in the Claude desktop app; the
 `[desktop_app]` section of the config holds the app internals that makes that possible.
 
-    uv run pytest -q         # backend tests
-    cd web && npm test       # UI tests

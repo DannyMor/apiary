@@ -9,8 +9,9 @@ skeleton, prototype, indexer, guidance, the indexer fixes, stage 5 (watcher + ev
 (swarms, tags, decisions, settings, colors), stage 7 part one (the prototype runs on the API),
 stage 8 (the keeper: archive, honey, restore, purge), stage 7 part two (the React port).
 
-`uv sync && uv run pytest -q && uv run ruff check . && uv run ruff format --check .` all pass
-(58 tests); `cd web && npm install && npm test && npm run build` (23 tests, tsc, vite). Python 3.12.12 via uv. `uv run apiary serve` then open http://127.0.0.1:7431;
+`make run` from a fresh clone installs, builds and serves; `make test` runs both suites (65 backend
+tests with ruff, 25 UI tests with tsc); `make dev` runs the daemon and Vite with hot reload; `make help`
+lists everything. The Makefile uses stamp files, so a second `make run` skips what is current. Python 3.12.12 via uv. `uv run apiary serve` then open http://127.0.0.1:7431;
 `.claude/launch.json` starts the same for the in-app browser.
 
 ## What exists
