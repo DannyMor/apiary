@@ -10,11 +10,15 @@ standing guidance.
 - This repo lives under `~/mydev` and belongs to the **personal** GitHub account
   `DannyMor` (remote `https://github.com/DannyMor/apiary.git`), never the work account
   `dannymor-orca`. `gh` holds both logins and the work one stays active for daily work.
-  Wrap every `gh` call and every push: `gh auth switch -u DannyMor`, do the action, then
-  `gh auth switch -u dannymor-orca`.
+  Pushes route by git config, no switching: `credential.https://github.com.useHttpPath` is
+  on and `credential.https://github.com/DannyMor.username` is `DannyMor`, so git asks for
+  that user and the fallback helper `~/mydev/tools/github/git-credential-gh-user` answers
+  with `gh auth token -u DannyMor`. A plain `git push` is correct; never `gh auth switch`.
+  `gh api` calls for this repo need the token explicitly:
+  `-H "Authorization: token $(gh auth token -u DannyMor)"`.
 - `~/mydev/tools/github/gh_env.zsh` (`gpr`, `gmerge`, `gpush`) is the alternative: it reads a
   per-repo fine-grained token from the macOS Keychain (`store_github_token apiary <token>`).
-  No token is stored for apiary yet, so `gh` is the working path.
+  No token is stored for apiary, so the routing above is the working path.
 - Before `gh repo create`, `git push`, or adding a remote: run `gh auth status`, print
   the exact `owner/name` you are about to use, and wait for an explicit yes.
 - Commits must carry the personal identity, set locally in this repo:
