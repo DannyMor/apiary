@@ -231,8 +231,9 @@ transcript; sessions started from a terminal only get the resume command.
 ## Decisions already made (don't reopen without reason)
 
 - White world, camera-relative everything, no fog; unlit floor with a shadow layer.
-- Running sessions in the React UI are a geometric beacon since 29 Sep 2026: emissive core
-  that breathes, a translucent shell that swells, a hex ring ping expanding from the foot.
+- Running sessions in the React UI are a geometric beacon since 29 Sep 2026: a core
+  whose albedo breathes between two in-gamut shades (an emissive term on top of lit shading
+  clipped to white and its contours crawled when the camera moved), a translucent front-face shell that swells, a hex ring ping expanding from the foot.
   There is no light per beacon: a breathing point light re-shaded whole plates every frame
   and read as the hive bases flickering. The prototype's blurred veil (selective Gaussian composited as a
   colored wash) pixelated at half resolution and its wash over the core read as flicker; the

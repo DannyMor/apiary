@@ -1,6 +1,6 @@
 // The world: an imperative three.js scene driven by the store. Ported from the prototype;
 // the visual decisions (white studio, VSM shadows, height in the vertex shader) are kept. Running
-// sessions are a geometric beacon (emissive core, breathing shell, ring ping), not the
+// sessions are a geometric beacon (a core whose color breathes between two in-gamut shades, breathing shell, ring ping), not the
 // prototype's blurred veil: crisp at any resolution, and no light changes per frame so the plates never shimmer.
 import * as THREE from "three";
 import type { GroupUI, Session } from "../model";
@@ -43,11 +43,12 @@ export interface EngineCallbacks {
   onOpen(id: string): void;
 }
 interface Cell { s: Session; pos: XZ; ghostPos?: XZ; h: number; hTarget: number; slot: { mesh: THREE.InstancedMesh; i: number } | null; group: string }
-interface Active { s: Session; core: THREE.Mesh; spill: THREE.Mesh; haze: THREE.Mesh; ring: THREE.Mesh; hCore: { value: number }; hHaze: { value: number }; phase: number }
+interface Active { s: Session; core: THREE.Mesh; dim: THREE.Color; bright: THREE.Color; spill: THREE.Mesh; haze: THREE.Mesh; ring: THREE.Mesh; hCore: { value: number }; hHaze: { value: number }; phase: number }
 const PING_SECONDS = 1.8; // one ring ping per breath
 // flat translucent layers sit a hair above the plate; the offset keeps them from z-fighting it at any zoom
 const OVERLAY = { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 } as const;
-const BEACON = { emissive: [0.3, 0.85], shell: [1.16, 1.42], shellOpacity: [0.38, 0.12], ring: [1.15, 3.0] };
+// core lightness at the low and high point of the breath; both stay inside what the lights can lift without clipping
+const BEACON = { coreL: [0.6, 0.86], shell: [1.16, 1.42], shellOpacity: [0.38, 0.12], ring: [1.15, 3.0] };
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -353,26 +354,27 @@ export class WorldEngine {
   }
   private addActive(c: Cell, base: Oklch) {
     const hue = { ...base, c: Math.max(base.c, 0.22) };
-    // the core: lit like its neighbours plus an emissive term in the group's hue that breathes
+    // the core: lit like its neighbours; only its albedo breathes, so the lit result never clips to white
+    const dim = threeColorOf({ ...hue, l: BEACON.coreL[0] }), bright = threeColorOf({ ...hue, l: BEACON.coreL[1], c: hue.c * 0.8 });
     const hCore = { value: c.h };
-    const coreMat = new THREE.MeshPhysicalMaterial({ color: threeColorOf({ ...hue, l: 0.72 }), emissive: threeColorOf({ ...hue, l: 0.7 }), emissiveIntensity: BEACON.emissive[0], roughness: 0.45, metalness: 0, clearcoat: 0.15, clearcoatRoughness: 0.4, envMapIntensity: 0.22 });
+    const coreMat = new THREE.MeshPhysicalMaterial({ color: dim.clone(), dithering: true, roughness: 0.45, metalness: 0, clearcoat: 0.15, clearcoatRoughness: 0.4, envMapIntensity: 0.22 });
     coreMat.userData.uHeight = hCore; withHeight(coreMat, "uniform");
     const coreDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }); coreDepth.userData.uHeight = hCore; withHeight(coreDepth, "uniform");
     const core = new THREE.Mesh(this.hexGeo, coreMat);
     core.position.set(c.pos.x, 0, c.pos.z); core.castShadow = core.receiveShadow = true; core.customDepthMaterial = coreDepth;
     // light spilling onto the base around the foot of the column
-    const spill = new THREE.Mesh(this.spillGeo, new THREE.MeshBasicMaterial({ map: this.spillTex, color: threeColorOf({ ...hue, l: 0.72 }), transparent: true, opacity: 0.3, depthWrite: false, ...OVERLAY }));
+    const spill = new THREE.Mesh(this.spillGeo, new THREE.MeshBasicMaterial({ map: this.spillTex, color: threeColorOf({ ...hue, l: 0.72 }), transparent: true, opacity: 0.3, depthWrite: false, dithering: true, ...OVERLAY }));
     spill.position.set(c.pos.x, 0.012, c.pos.z); spill.scale.set(6, 1, 6); spill.renderOrder = 1;
     // a translucent shell that swells and fades with the breath
     const hHaze = { value: c.h + 0.5 };
-    const hazeMat = new THREE.MeshBasicMaterial({ color: threeColorOf({ ...hue, l: 0.8 }), transparent: true, opacity: BEACON.shellOpacity[0], depthWrite: false, side: THREE.DoubleSide, ...OVERLAY }); hazeMat.userData.uHeight = hHaze; withHeight(hazeMat, "uniform");
+    const hazeMat = new THREE.MeshBasicMaterial({ color: threeColorOf({ ...hue, l: 0.8 }), transparent: true, opacity: BEACON.shellOpacity[0], depthWrite: false, dithering: true, ...OVERLAY }); hazeMat.userData.uHeight = hHaze; withHeight(hazeMat, "uniform");
     const haze = new THREE.Mesh(this.hexGeo, hazeMat); haze.position.set(c.pos.x, 0.05, c.pos.z); haze.scale.set(BEACON.shell[0], 1, BEACON.shell[0]); haze.renderOrder = 2;
     // a ring ping that expands from the foot of the column and fades, like a beacon on a map
     // white, so it reads on every hive color
-    const ring = new THREE.Mesh(this.ringGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthWrite: false, ...OVERLAY }));
+    const ring = new THREE.Mesh(this.ringGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthWrite: false, dithering: true, ...OVERLAY }));
     ring.position.set(c.pos.x, 0.02, c.pos.z); ring.renderOrder = 3;
     this.scene.add(core, spill, haze, ring);
-    this.actives.push({ s: c.s, core, spill, haze, ring, hCore, hHaze, phase: Math.random() * PING_SECONDS });
+    this.actives.push({ s: c.s, core, dim, bright, spill, haze, ring, hCore, hHaze, phase: Math.random() * PING_SECONDS });
   }
   private heightGeometry(n: number) { const g = this.hexGeo.clone(); g.setAttribute("aHeight", new THREE.InstancedBufferAttribute(new Float32Array(n), 1)); return g; }
   private makeBatch(list: Cell[], material: THREE.Material, depthMat: THREE.Material | null, shadows: boolean) {
@@ -582,7 +584,7 @@ export class WorldEngine {
     for (const a of this.actives) {
       const c = this.byId.get(a.s.id); if (!c) continue;
       a.hCore.value = c.h;
-      (a.core.material as THREE.MeshPhysicalMaterial).emissiveIntensity = mix(BEACON.emissive, breath);
+      (a.core.material as THREE.MeshPhysicalMaterial).color.lerpColors(a.dim, a.bright, breath);
       const grow = mix(BEACON.shell, breath);
       a.haze.scale.set(grow, 1, grow); a.hHaze.value = c.h + 0.2 + 0.5 * breath;
       (a.haze.material as THREE.MeshBasicMaterial).opacity = mix(BEACON.shellOpacity, breath);
