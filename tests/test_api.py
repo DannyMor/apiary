@@ -209,3 +209,15 @@ def test_open_launches_the_first_url_opening_on_this_machine(config: Config, tmp
             client.post("/api/sessions/s2/open").status_code == 409
         )  # only a command to copy, nothing to launch
         assert client.post("/api/sessions/nope/open").status_code == 404
+
+
+def test_app_shell_is_never_cached(config: Config, tmp_path: Path) -> None:
+    dist = tmp_path / "web" / "dist"
+    dist.mkdir(parents=True)
+    (dist / "index.html").write_text("<title>Apiary</title><script src=/assets/x.js></script>")
+    (dist / "assets").mkdir()
+    (dist / "assets" / "x.js").write_text("1")
+    with TestClient(create_app(config, web_dir=tmp_path / "web")) as client:
+        assert client.get("/").headers["cache-control"] == "no-cache"
+        assert client.get("/index.html").headers["cache-control"] == "no-cache"
+        assert "cache-control" not in client.get("/assets/x.js").headers  # hashed assets may be cached

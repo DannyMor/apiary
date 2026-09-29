@@ -58,6 +58,7 @@ def create_app(
     summarizer: Summarizer | None = None,
     openers: list[Opener] | None = None,
     launcher: Callable[[str], None] = platform_launch,
+    web_dir: Path = WEB_DIR,
 ) -> FastAPI:
     config = config or Config.load()
     config.ensure_dirs()
@@ -316,7 +317,7 @@ def create_app(
         app.state.hub.publish({"type": "settings.updated", "settings": merged})
         return merged
 
-    _mount_ui(app)
+    _mount_ui(app, web_dir)
     return app
 
 
@@ -361,10 +362,10 @@ async def _until_closed(ws: WebSocket) -> None:
         await ws.receive_text()
 
 
-def _mount_ui(app: FastAPI) -> None:
+def _mount_ui(app: FastAPI, web_dir: Path) -> None:
     """Serve the built UI if present, else the prototype, else a hint. The prototype always has /prototype."""
-    dist = WEB_DIR / "dist"
-    proto = WEB_DIR / "prototype" / "apiary.html"
+    dist = web_dir / "dist"
+    proto = web_dir / "prototype" / "apiary.html"
     if proto.is_file():
 
         @app.get("/prototype", include_in_schema=False)
@@ -372,6 +373,15 @@ def _mount_ui(app: FastAPI) -> None:
             return FileResponse(proto)
 
     if dist.is_dir():
+
+        @app.middleware("http")
+        async def shell_never_cached(request: Request, call_next):  # type: ignore[no-untyped-def]
+            # the shell names a hashed bundle; a cached shell would keep loading yesterday's build
+            response = await call_next(request)
+            if request.url.path in ("/", "/index.html"):
+                response.headers["cache-control"] = "no-cache"
+            return response
+
         app.mount("/", StaticFiles(directory=dist, html=True), name="ui")
     elif proto.is_file():
 
