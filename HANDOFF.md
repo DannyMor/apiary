@@ -232,13 +232,24 @@ transcript; sessions started from a terminal only get the resume command.
 
 - White world, camera-relative everything, no fog; unlit floor with a shadow layer.
 - Running sessions in the React UI are a geometric beacon since 29 Sep 2026: emissive core
-  that breathes, a translucent shell that swells, a hex ring ping expanding from the foot, a
-  point light in candela. The prototype's blurred veil (selective Gaussian composited as a
+  that breathes, a translucent shell that swells, a hex ring ping expanding from the foot.
+  There is no light per beacon: a breathing point light re-shaded whole plates every frame
+  and read as the hive bases flickering. The prototype's blurred veil (selective Gaussian composited as a
   colored wash) pixelated at half resolution and its wash over the core read as flicker; the
   prototype keeps it as a record, the React engine does not.
 - Liveness comes from the last timestamped record, never from the file's mtime: opening a
   session in the desktop app appends an untimestamped `atis-latch` record, which used to make
   a July session "live", score 100, full height.
+- The engine rebuilds the scene only when `structureKey` changes (cells, places, activity,
+  groups). Every other websocket event goes through `refresh`, which retargets heights and
+  colors in place. Before that, each event tore down plates, materials and label DOM, about
+  once per second on a busy machine, and that was the flicker.
+- Depth precision: no ground plane (the shadow floor sits straight over the background),
+  translucent layers use `OVERLAY` polygon offset, and camera near/far follow the orbit radius.
+- Group labels are black text with a hard white outline built from zero-blur text-shadows.
+- A browser that cached `index.html` before the no-cache header keeps running the old bundle
+  until a hard reload (Cmd+Shift+R). Check the loaded `assets/index-*.js` name against `web/dist`
+  before judging any visual change.
 - Filtered-out cells are solid pale grey, not transparent.
 - Selection bar is a docked footer, not an overlay.
 - Group colors: curated OKLCH hues avoiding the olive/mustard band; UI accent is ink.

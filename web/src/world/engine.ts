@@ -1,7 +1,7 @@
 // The world: an imperative three.js scene driven by the store. Ported from the prototype;
 // the visual decisions (white studio, VSM shadows, height in the vertex shader) are kept. Running
-// sessions are a geometric beacon (emissive core, breathing shell, ring ping, point light), not the
-// prototype's blurred veil: crisp at any resolution and nothing is swapped per frame.
+// sessions are a geometric beacon (emissive core, breathing shell, ring ping), not the
+// prototype's blurred veil: crisp at any resolution, and no light changes per frame so the plates never shimmer.
 import * as THREE from "three";
 import type { GroupUI, Session } from "../model";
 import { gamutMap, shadeOf, type Oklch } from "../lib/color";
@@ -19,6 +19,21 @@ export interface SceneInput {
   shown: Set<string>; // ids that pass the filter; when it equals all sessions nothing is dimmed
   filtering: boolean;
 }
+/** Everything that decides which objects exist and where; when this is unchanged a scene update needs no rebuild. */
+export function structureKey(input: SceneInput): string {
+  const at = (n: number) => n.toFixed(2);
+  const cells = input.sessions
+    .filter((s) => input.layout.pos.has(s.id))
+    .map((s) => {
+      const p = input.layout.pos.get(s.id)!, g = input.layout.ghostPos.get(s.id);
+      return [s.id, input.layout.displayGroup.get(s.id) ?? s.repo, s.repo, at(p.x), at(p.z), g ? at(g.x) + "," + at(g.z) : "", s.active ? 1 : 0, input.filtering ? (input.shown.has(s.id) ? 1 : 0) : 2].join("|");
+    });
+  const groups = input.groupOrder.map((gid) => {
+    const g = input.groups[gid], c = input.layout.centers.get(gid);
+    return g ? [gid, g.name, g.kind, g.color.l, g.color.c, g.color.h, c ? at(c.x) + "," + at(c.z) : "", input.layout.count.get(gid) ?? 0].join("|") : gid;
+  });
+  return cells.join(";") + "#" + groups.join(";");
+}
 export interface EngineCallbacks {
   onPick(id: string, additive: boolean): void;
   onPickPlate(gid: string): void;
@@ -28,9 +43,11 @@ export interface EngineCallbacks {
   onOpen(id: string): void;
 }
 interface Cell { s: Session; pos: XZ; ghostPos?: XZ; h: number; hTarget: number; slot: { mesh: THREE.InstancedMesh; i: number } | null; group: string }
-interface Active { s: Session; core: THREE.Mesh; light: THREE.PointLight; spill: THREE.Mesh; haze: THREE.Mesh; ring: THREE.Mesh; hCore: { value: number }; hHaze: { value: number }; phase: number }
+interface Active { s: Session; core: THREE.Mesh; spill: THREE.Mesh; haze: THREE.Mesh; ring: THREE.Mesh; hCore: { value: number }; hHaze: { value: number }; phase: number }
 const PING_SECONDS = 1.8; // one ring ping per breath
-const BEACON = { emissive: [0.3, 0.85], shell: [1.16, 1.42], shellOpacity: [0.38, 0.12], light: [10, 40], ring: [1.15, 3.0] };
+// flat translucent layers sit a hair above the plate; the offset keeps them from z-fighting it at any zoom
+const OVERLAY = { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 } as const;
+const BEACON = { emissive: [0.3, 0.85], shell: [1.16, 1.42], shellOpacity: [0.38, 0.12], ring: [1.15, 3.0] };
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -140,7 +157,6 @@ export class WorldEngine {
   private scene = new THREE.Scene();
   private camera = new THREE.PerspectiveCamera(45, 1, 0.1, 500);
   private sun: THREE.DirectionalLight;
-  private ground: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   private shadowFloor: THREE.Mesh<THREE.PlaneGeometry, THREE.ShadowMaterial>;
   private hoverRing: THREE.Mesh<THREE.CylinderGeometry, THREE.MeshBasicMaterial>;
   private hexGeo = hexPrism(HEX_R - 0.04, 0.04);
@@ -160,6 +176,7 @@ export class WorldEngine {
   private cells: Cell[] = [];
   private byId = new Map<string, Cell>();
   private input: SceneInput | null = null;
+  private structure = "";
   private selected = new Set<string>();
   private hover: string | null = null;
   private focusGroup: string | null = null;
@@ -195,11 +212,9 @@ export class WorldEngine {
     this.sun.castShadow = true; this.sun.shadow.mapSize.set(4096, 4096); this.sun.shadow.bias = -0.0002; this.sun.shadow.normalBias = 0.01;
     this.sun.shadow.radius = 3; this.sun.shadow.blurSamples = 12;
     const fill = new THREE.DirectionalLight(0xdfe8ff, 0.35); fill.position.set(-20, 14, -18); this.scene.add(fill);
-    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), new THREE.MeshBasicMaterial({ color: new THREE.Color(this.world) })); // unlit: exactly the sky color
-    this.ground.rotation.x = -Math.PI / 2; this.ground.position.y = -0.45; this.scene.add(this.ground);
     this.shadowFloor = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), new THREE.ShadowMaterial({ opacity: 0.22 })); // only the shadows, on top of it
     this.shadowFloor.rotation.x = -Math.PI / 2; this.shadowFloor.position.y = -0.449; this.shadowFloor.receiveShadow = true; this.scene.add(this.shadowFloor);
-    this.hoverRing = new THREE.Mesh(new THREE.CylinderGeometry(HEX_R * 1.22, HEX_R * 1.22, 0.06, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color("#243140"), transparent: true, opacity: 0.85 }));
+    this.hoverRing = new THREE.Mesh(new THREE.CylinderGeometry(HEX_R * 1.22, HEX_R * 1.22, 0.06, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color("#243140"), transparent: true, opacity: 0.85, ...OVERLAY }));
     this.hoverRing.visible = false; this.scene.add(this.hoverRing);
     this.bindPointer();
     this.resize();
@@ -209,8 +224,24 @@ export class WorldEngine {
 
   // ---------------------------------------------------------------- inputs from the store
   setScene(input: SceneInput) {
+    const key = structureKey(input);
+    if (key === this.structure && this.cells.length) { this.refresh(input); return; }
+    this.structure = key;
     this.input = input;
     this.rebuild();
+  }
+  // same cells, same places, same groups: only data moved (recency, messages, titles), so nothing is torn down
+  private refresh(input: SceneInput) {
+    this.input = input;
+    const sessions = new Map(input.sessions.map((s) => [s.id, s]));
+    for (const c of this.cells) {
+      c.s = sessions.get(c.s.id) ?? c.s;
+      c.hTarget = heightFor(c.s, input.lens, input.now);
+    }
+    for (const a of this.actives) a.s = sessions.get(a.s.id) ?? a.s;
+    this.heightsAnimating = true;
+    this.refreshColors();
+    this.rebuildLabelsText();
   }
   setSelection(selected: Set<string>) { this.selected = selected; this.refreshColors(); }
   setHover(id: string | null) {
@@ -232,7 +263,6 @@ export class WorldEngine {
     const c = new THREE.Color(hex);
     const lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b; // linear; good enough to pick a text palette
     (this.scene.background as THREE.Color).copy(c);
-    this.ground.material.color.copy(c);
     this.shadowFloor.material.opacity = lum > 0.2 ? 0.22 : 0.5;
     this.container.style.setProperty("--bg", hex);
     for (const [k, v] of Object.entries(lum > 0.2 ? LIGHT_TOKENS : DARK_TOKENS)) this.container.style.setProperty(k, v);
@@ -330,21 +360,19 @@ export class WorldEngine {
     const coreDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }); coreDepth.userData.uHeight = hCore; withHeight(coreDepth, "uniform");
     const core = new THREE.Mesh(this.hexGeo, coreMat);
     core.position.set(c.pos.x, 0, c.pos.z); core.castShadow = core.receiveShadow = true; core.customDepthMaterial = coreDepth;
-    // a lamp above it, in candela (three r155+ lights are physical), so the plate and the neighbours catch the beat
-    const light = new THREE.PointLight(threeColorOf({ ...hue, l: 0.8 }), BEACON.light[0], 14, 1.6); light.position.set(c.pos.x, c.h + 1.2, c.pos.z);
     // light spilling onto the base around the foot of the column
-    const spill = new THREE.Mesh(this.spillGeo, new THREE.MeshBasicMaterial({ map: this.spillTex, color: threeColorOf({ ...hue, l: 0.72 }), transparent: true, opacity: 0.3, depthWrite: false }));
+    const spill = new THREE.Mesh(this.spillGeo, new THREE.MeshBasicMaterial({ map: this.spillTex, color: threeColorOf({ ...hue, l: 0.72 }), transparent: true, opacity: 0.3, depthWrite: false, ...OVERLAY }));
     spill.position.set(c.pos.x, 0.012, c.pos.z); spill.scale.set(6, 1, 6); spill.renderOrder = 1;
     // a translucent shell that swells and fades with the breath
     const hHaze = { value: c.h + 0.5 };
-    const hazeMat = new THREE.MeshBasicMaterial({ color: threeColorOf({ ...hue, l: 0.8 }), transparent: true, opacity: BEACON.shellOpacity[0], depthWrite: false, side: THREE.DoubleSide }); hazeMat.userData.uHeight = hHaze; withHeight(hazeMat, "uniform");
-    const haze = new THREE.Mesh(this.hexGeo, hazeMat); haze.position.set(c.pos.x, 0, c.pos.z); haze.scale.set(BEACON.shell[0], 1, BEACON.shell[0]); haze.renderOrder = 2;
+    const hazeMat = new THREE.MeshBasicMaterial({ color: threeColorOf({ ...hue, l: 0.8 }), transparent: true, opacity: BEACON.shellOpacity[0], depthWrite: false, side: THREE.DoubleSide, ...OVERLAY }); hazeMat.userData.uHeight = hHaze; withHeight(hazeMat, "uniform");
+    const haze = new THREE.Mesh(this.hexGeo, hazeMat); haze.position.set(c.pos.x, 0.05, c.pos.z); haze.scale.set(BEACON.shell[0], 1, BEACON.shell[0]); haze.renderOrder = 2;
     // a ring ping that expands from the foot of the column and fades, like a beacon on a map
     // white, so it reads on every hive color
-    const ring = new THREE.Mesh(this.ringGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthWrite: false }));
+    const ring = new THREE.Mesh(this.ringGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthWrite: false, ...OVERLAY }));
     ring.position.set(c.pos.x, 0.02, c.pos.z); ring.renderOrder = 3;
-    this.scene.add(core, light, spill, haze, ring);
-    this.actives.push({ s: c.s, core, light, spill, haze, ring, hCore, hHaze, phase: Math.random() * PING_SECONDS });
+    this.scene.add(core, spill, haze, ring);
+    this.actives.push({ s: c.s, core, spill, haze, ring, hCore, hHaze, phase: Math.random() * PING_SECONDS });
   }
   private heightGeometry(n: number) { const g = this.hexGeo.clone(); g.setAttribute("aHeight", new THREE.InstancedBufferAttribute(new Float32Array(n), 1)); return g; }
   private makeBatch(list: Cell[], material: THREE.Material, depthMat: THREE.Material | null, shadows: boolean) {
@@ -380,7 +408,7 @@ export class WorldEngine {
     for (const m of [this.hexMesh, this.dimMesh, this.ghostMesh]) if (m) { this.scene.remove(m); m.geometry.dispose(); m.dispose(); }
     this.hexMesh = this.dimMesh = this.ghostMesh = null;
     for (const p of this.plates) { this.scene.remove(p); (p.material as THREE.Material).dispose(); }
-    for (const a of this.actives) { this.scene.remove(a.core, a.light, a.spill, a.haze, a.ring); for (const m of [a.core, a.spill, a.haze, a.ring]) (m.material as THREE.Material).dispose(); }
+    for (const a of this.actives) { this.scene.remove(a.core, a.spill, a.haze, a.ring); for (const m of [a.core, a.spill, a.haze, a.ring]) (m.material as THREE.Material).dispose(); }
     this.plates = []; this.actives = [];
   }
   private fitShadowCamera() {
@@ -536,6 +564,8 @@ export class WorldEngine {
     const r = o.cur.radius, p = o.cur.phi, t = o.cur.theta;
     this.camera.position.set(o.cur.target.x + r * Math.sin(p) * Math.sin(t), o.cur.target.y + r * Math.cos(p), o.cur.target.z + r * Math.sin(p) * Math.cos(t));
     this.camera.lookAt(o.cur.target);
+    const near = Math.max(0.5, r * 0.05), far = r * 3 + 250;
+    if (Math.abs(near - this.camera.near) > near * 0.02 || Math.abs(far - this.camera.far) > far * 0.02) { this.camera.near = near; this.camera.far = far; this.camera.updateProjectionMatrix(); }
 
     if (this.heightsAnimating) {
       const kk = 1 - Math.exp(-dt * 6);
@@ -553,7 +583,6 @@ export class WorldEngine {
       const c = this.byId.get(a.s.id); if (!c) continue;
       a.hCore.value = c.h;
       (a.core.material as THREE.MeshPhysicalMaterial).emissiveIntensity = mix(BEACON.emissive, breath);
-      a.light.position.y = c.h + 1.2; a.light.intensity = mix(BEACON.light, breath);
       const grow = mix(BEACON.shell, breath);
       a.haze.scale.set(grow, 1, grow); a.hHaze.value = c.h + 0.2 + 0.5 * breath;
       (a.haze.material as THREE.MeshBasicMaterial).opacity = mix(BEACON.shellOpacity, breath);
