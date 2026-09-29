@@ -1,3 +1,4 @@
+import os
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -63,7 +64,7 @@ def test_index_round_trip(tmp_path: Path) -> None:
     assert conn.execute("SELECT status FROM sessions WHERE id='s2'").fetchone()[0] == "purged"
 
 
-def test_live_status_by_mtime(tmp_path: Path) -> None:
+def test_live_status_by_last_message_time(tmp_path: Path) -> None:
     claude = tmp_path / "projects"
     p = write_transcript(claude, "/r/repo", "live1", "Doing things", start=datetime.now(UTC))
     conn = connect(tmp_path / "apiary.db")
@@ -71,6 +72,9 @@ def test_live_status_by_mtime(tmp_path: Path) -> None:
     assert conn.execute("SELECT status FROM sessions WHERE id='live1'").fetchone()[0] == "live"
     index_all(conn, claude, now=p.stat().st_mtime + 3600)
     assert conn.execute("SELECT status FROM sessions WHERE id='live1'").fetchone()[0] == "idle"
+    # the flip rescored it: no longer "running now" at 100
+    score, reasons = conn.execute("SELECT score, reasons FROM scores WHERE session_id='live1'").fetchone()
+    assert score < 100 and "running now" not in reasons
 
 
 def test_worktree_session_belongs_to_parent_repo(tmp_path: Path) -> None:
@@ -210,3 +214,20 @@ def test_uncolored_repo_hives_get_a_color_on_the_next_index(tmp_path: Path) -> N
     conn.execute("UPDATE groups SET color=NULL")
     index_all(conn, claude)
     assert conn.execute("SELECT color FROM groups WHERE id='repo:a'").fetchone()[0] == "0.64 0.21 22"
+
+
+def test_liveness_follows_conversation_activity_not_file_mtime(tmp_path: Path) -> None:
+    claude = tmp_path / "projects"
+    p = write_transcript(
+        claude, "/r/repo", "opened", "old talk", start=datetime.now(UTC) - timedelta(hours=2)
+    )
+    # the desktop app appends a record without a timestamp when a session is merely opened
+    p.write_text(p.read_text() + '{"type":"atis-latch","atis":"","sessionId":"opened"}\n')
+    conn = connect(tmp_path / "apiary.db")
+    index_all(conn, claude, now=time.time())
+    assert conn.execute("SELECT status FROM sessions WHERE id='opened'").fetchone()[0] == "idle"
+
+    # unchanged file, still judged by its last message, not by its mtime
+    os.utime(p, None)
+    index_all(conn, claude, now=time.time())
+    assert conn.execute("SELECT status FROM sessions WHERE id='opened'").fetchone()[0] == "idle"

@@ -19,12 +19,15 @@ from pathlib import Path
 from apiary.colors import suggest
 from apiary.db import transaction
 from apiary.models import Session
-from apiary.scoring import score_session
+from apiary.queries import session_of
+from apiary.scoring import Scored, score_session
 from apiary.transcript import read_transcript, repo_name_from_dir, repo_path_from_dir, split_worktree
 
-LIVE_WINDOW_SECONDS = 120.0  # a transcript written this recently counts as running
+# A session whose last timestamped record is this recent counts as running. Not the file's
+# mtime: the desktop app appends untimestamped housekeeping records when a session is opened.
+LIVE_WINDOW_SECONDS = 120.0
 # Bump whenever transcript parsing or row derivation changes: every file is re-read once.
-INDEX_VERSION = 2
+INDEX_VERSION = 3
 
 
 @dataclass
@@ -59,7 +62,7 @@ def index_all(conn: sqlite3.Connection, claude_dir: Path, now: float | None = No
         seen.add(session_id)
         if not reread_all and known.get(session_id) == (str(path), st.st_mtime, st.st_size):
             report.unchanged += 1
-            _refresh_liveness(conn, session_id, st.st_mtime, now)
+            _refresh_liveness(conn, session_id, now)
             continue
         _index_one(conn, project_dir, path, st.st_mtime, st.st_size, now)
         report.indexed += 1
@@ -81,6 +84,16 @@ def index_all(conn: sqlite3.Connection, claude_dir: Path, now: float | None = No
 
     report.duration_s = time.perf_counter() - t0
     return report
+
+
+def _store_score(conn: sqlite3.Connection, session_id: str, scored: Scored, now: float) -> None:
+    conn.execute(
+        """INSERT INTO scores(session_id, score, reasons, policy_version, scored_at)
+           VALUES(?, ?, ?, 1, ?)
+           ON CONFLICT(session_id) DO UPDATE SET score=excluded.score, reasons=excluded.reasons,
+               scored_at=excluded.scored_at""",
+        (session_id, scored.score, json.dumps(scored.reasons), now),
+    )
 
 
 def _color_uncolored_groups(conn: sqlite3.Connection) -> None:
@@ -126,12 +139,21 @@ def _canonical_transcripts(
     return best
 
 
-def _refresh_liveness(conn: sqlite3.Connection, session_id: str, mtime: float, now: float) -> None:
-    status = "live" if now - mtime < LIVE_WINDOW_SECONDS else "idle"
-    conn.execute(
-        "UPDATE sessions SET status=? WHERE id=? AND status IN ('live','idle') AND status != ?",
-        (status, session_id, status),
-    )
+def _refresh_liveness(conn: sqlite3.Connection, session_id: str, now: float) -> None:
+    """Live turns idle through silence that no file event announces; a flip changes the score too."""
+    row = conn.execute(
+        "SELECT * FROM sessions WHERE id=? AND status IN ('live', 'idle')", (session_id,)
+    ).fetchone()
+    if row is None:
+        return
+    status = "live" if now - row["last_active_at"] < LIVE_WINDOW_SECONDS else "idle"
+    if status == row["status"]:
+        return
+    with transaction(conn):
+        conn.execute("UPDATE sessions SET status=? WHERE id=?", (status, session_id))
+        _store_score(
+            conn, session_id, score_session(session_of(row).model_copy(update={"status": status}), now), now
+        )
 
 
 def _index_one(
@@ -143,7 +165,7 @@ def _index_one(
     repo_name = Path(repo_path).name or repo_name_from_dir(project_dir)
     last = facts.last_ts or mtime
     created = facts.first_ts or last
-    status = "live" if now - mtime < LIVE_WINDOW_SECONDS else "idle"
+    status = "live" if now - last < LIVE_WINDOW_SECONDS else "idle"
     session = Session(
         id=session_id,
         repo_path=repo_path,
@@ -198,10 +220,4 @@ def _index_one(
             "INSERT INTO group_members(group_id, session_id) VALUES(?, ?) ON CONFLICT DO NOTHING",
             (group_id, session_id),
         )
-        conn.execute(
-            """INSERT INTO scores(session_id, score, reasons, policy_version, scored_at)
-               VALUES(?, ?, ?, 1, ?)
-               ON CONFLICT(session_id) DO UPDATE SET score=excluded.score, reasons=excluded.reasons,
-                   scored_at=excluded.scored_at""",
-            (session_id, scored.score, json.dumps(scored.reasons), now),
-        )
+        _store_score(conn, session_id, scored, now)
