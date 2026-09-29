@@ -231,11 +231,19 @@ transcript; sessions started from a terminal only get the resume command.
 ## Decisions already made (don't reopen without reason)
 
 - White world, camera-relative everything, no fog; unlit floor with a shadow layer.
-- Glow = selective Gaussian pass composited as a colored veil (additive glow is
-  invisible on light backgrounds; UnrealBloomPass produces blotches at tight radii).
+- Running sessions in the React UI are a geometric beacon since 29 Sep 2026: emissive core
+  that breathes, a translucent shell that swells, a hex ring ping expanding from the foot, a
+  point light in candela. The prototype's blurred veil (selective Gaussian composited as a
+  colored wash) pixelated at half resolution and its wash over the core read as flicker; the
+  prototype keeps it as a record, the React engine does not.
+- Liveness comes from the last timestamped record, never from the file's mtime: opening a
+  session in the desktop app appends an untimestamped `atis-latch` record, which used to make
+  a July session "live", score 100, full height.
 - Filtered-out cells are solid pale grey, not transparent.
 - Selection bar is a docked footer, not an overlay.
 - Group colors: curated OKLCH hues avoiding the olive/mustard band; UI accent is ink.
+- Hive labels are plain text with a crisp outline in the world color (text-stroke plus
+  eight hard shadows), not a soft glow. A click on nothing clears focus, selection and hover.
 
 ## Next
 

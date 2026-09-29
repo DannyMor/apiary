@@ -1,5 +1,7 @@
 // The world: an imperative three.js scene driven by the store. Ported from the prototype;
-// the visual decisions (white studio, veil glow, VSM shadows, height in the vertex shader) are kept.
+// the visual decisions (white studio, VSM shadows, height in the vertex shader) are kept. Running
+// sessions are a geometric beacon (emissive core, breathing shell, ring ping, point light), not the
+// prototype's blurred veil: crisp at any resolution and nothing is swapped per frame.
 import * as THREE from "three";
 import type { GroupUI, Session } from "../model";
 import { gamutMap, shadeOf, type Oklch } from "../lib/color";
@@ -20,12 +22,15 @@ export interface SceneInput {
 export interface EngineCallbacks {
   onPick(id: string, additive: boolean): void;
   onPickPlate(gid: string): void;
+  onClear(): void; // a click on nothing
   onHover(id: string | null): void;
   onView(focusGroup: string | null, focusSession: string | null): void;
   onOpen(id: string): void;
 }
 interface Cell { s: Session; pos: XZ; ghostPos?: XZ; h: number; hTarget: number; slot: { mesh: THREE.InstancedMesh; i: number } | null; group: string }
-interface Active { s: Session; core: THREE.Mesh; light: THREE.PointLight; spill: THREE.Mesh; haze: THREE.Mesh; hCore: { value: number }; hHaze: { value: number }; glowMat: THREE.MeshBasicMaterial; glowLo: THREE.Color; glowHi: THREE.Color; coreMat: THREE.Material }
+interface Active { s: Session; core: THREE.Mesh; light: THREE.PointLight; spill: THREE.Mesh; haze: THREE.Mesh; ring: THREE.Mesh; hCore: { value: number }; hHaze: { value: number }; phase: number }
+const PING_SECONDS = 1.8; // one ring ping per breath
+const BEACON = { emissive: [0.3, 0.85], shell: [1.16, 1.42], shellOpacity: [0.38, 0.12], light: [10, 40], ring: [1.15, 3.0] };
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -64,6 +69,16 @@ function hexPrism(radius: number, bevel: number) {
   const geo = new THREE.ExtrudeGeometry(hexShape(radius), { depth: 1, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 6, curveSegments: 1 });
   geo.rotateX(-Math.PI / 2); geo.translate(0, bevel, 0); // base at y = 0, top at y = 1
   return smoothNormals(geo, 32);
+}
+function hexRing(outer: number, inner: number) {
+  const shape = hexShape(outer);
+  const hole = new THREE.Path();
+  for (let k = 0; k < 6; k++) { const ang = (k * Math.PI) / 3, x = inner * Math.sin(ang), y = inner * Math.cos(ang); if (k) hole.lineTo(x, y); else hole.moveTo(x, y); }
+  hole.closePath();
+  shape.holes.push(hole);
+  const geo = new THREE.ShapeGeometry(shape);
+  geo.rotateX(-Math.PI / 2);
+  return geo;
 }
 function slab(radius: number, depth: number, bevel: number) {
   const geo = new THREE.ExtrudeGeometry(hexShape(radius), { depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 5, curveSegments: 1 });
@@ -136,7 +151,7 @@ export class WorldEngine {
   private dimMat = withHeight(new THREE.MeshPhysicalMaterial({ roughness: 0.7, metalness: 0, clearcoat: 0, envMapIntensity: 0.15 }), "attribute");
   private spillTex = spillTexture();
   private spillGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
-  private glow: ReturnType<WorldEngine["makeGlow"]>;
+  private ringGeo = hexRing(1, 0.8);
   private hexMesh: THREE.InstancedMesh | null = null;
   private dimMesh: THREE.InstancedMesh | null = null;
   private ghostMesh: THREE.InstancedMesh | null = null;
@@ -186,7 +201,6 @@ export class WorldEngine {
     this.shadowFloor.rotation.x = -Math.PI / 2; this.shadowFloor.position.y = -0.449; this.shadowFloor.receiveShadow = true; this.scene.add(this.shadowFloor);
     this.hoverRing = new THREE.Mesh(new THREE.CylinderGeometry(HEX_R * 1.22, HEX_R * 1.22, 0.06, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color("#243140"), transparent: true, opacity: 0.85 }));
     this.hoverRing.visible = false; this.scene.add(this.hoverRing);
-    this.glow = this.makeGlow();
     this.bindPointer();
     this.resize();
     this.orbit.cur.radius = this.orbit.goal.radius + 40; this.orbit.cur.phi = ANGLE_45;
@@ -259,7 +273,6 @@ export class WorldEngine {
     const w = this.container.clientWidth, h = this.container.clientHeight;
     if (!w || !h) return;
     this.renderer.setSize(w, h, false); this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
-    this.glow.setSize(w, h);
   }
   dispose() {
     this.disposed = true;
@@ -309,23 +322,29 @@ export class WorldEngine {
     this.buildGroupLabels();
   }
   private addActive(c: Cell, base: Oklch) {
-    // same material as every other column plus an even emissive term in the group's hue: lit like its neighbours, glowing from within
+    const hue = { ...base, c: Math.max(base.c, 0.22) };
+    // the core: lit like its neighbours plus an emissive term in the group's hue that breathes
     const hCore = { value: c.h };
-    const coreMat = new THREE.MeshPhysicalMaterial({ color: threeColorOf({ ...base, l: 0.7 }), emissive: threeColorOf({ ...base, l: 0.72, c: Math.max(base.c, 0.2) }), emissiveIntensity: 0.45, roughness: 0.5, metalness: 0, clearcoat: 0.15, clearcoatRoughness: 0.4, envMapIntensity: 0.22 });
+    const coreMat = new THREE.MeshPhysicalMaterial({ color: threeColorOf({ ...hue, l: 0.72 }), emissive: threeColorOf({ ...hue, l: 0.7 }), emissiveIntensity: BEACON.emissive[0], roughness: 0.45, metalness: 0, clearcoat: 0.15, clearcoatRoughness: 0.4, envMapIntensity: 0.22 });
     coreMat.userData.uHeight = hCore; withHeight(coreMat, "uniform");
-    const glowLo = threeColorOf({ ...base, l: 0.5, c: Math.max(base.c, 0.22) }), glowHi = threeColorOf({ ...base, l: 0.68, c: Math.max(base.c, 0.22) });
-    const glowMat = new THREE.MeshBasicMaterial({ color: glowLo.clone() }); glowMat.userData.uHeight = hCore; withHeight(glowMat, "uniform");
     const coreDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }); coreDepth.userData.uHeight = hCore; withHeight(coreDepth, "uniform");
     const core = new THREE.Mesh(this.hexGeo, coreMat);
     core.position.set(c.pos.x, 0, c.pos.z); core.castShadow = core.receiveShadow = true; core.customDepthMaterial = coreDepth;
-    const light = new THREE.PointLight(threeColorOf({ ...base, l: 0.75 }), 0.5, 9, 2); light.position.set(c.pos.x, c.h + 1, c.pos.z);
-    const spill = new THREE.Mesh(this.spillGeo, new THREE.MeshBasicMaterial({ map: this.spillTex, color: threeColorOf({ ...base, l: 0.7, c: Math.max(base.c, 0.2) }), transparent: true, opacity: 0.22, depthWrite: false }));
-    spill.position.set(c.pos.x, 0.012, c.pos.z); spill.scale.set(5.2, 1, 5.2); spill.renderOrder = 1;
+    // a lamp above it, in candela (three r155+ lights are physical), so the plate and the neighbours catch the beat
+    const light = new THREE.PointLight(threeColorOf({ ...hue, l: 0.8 }), BEACON.light[0], 14, 1.6); light.position.set(c.pos.x, c.h + 1.2, c.pos.z);
+    // light spilling onto the base around the foot of the column
+    const spill = new THREE.Mesh(this.spillGeo, new THREE.MeshBasicMaterial({ map: this.spillTex, color: threeColorOf({ ...hue, l: 0.72 }), transparent: true, opacity: 0.3, depthWrite: false }));
+    spill.position.set(c.pos.x, 0.012, c.pos.z); spill.scale.set(6, 1, 6); spill.renderOrder = 1;
+    // a translucent shell that swells and fades with the breath
     const hHaze = { value: c.h + 0.5 };
-    const hazeMat = new THREE.MeshBasicMaterial({ color: threeColorOf({ ...base, l: 0.78, c: Math.max(base.c, 0.2) }), transparent: true, opacity: 0.16, depthWrite: false }); hazeMat.userData.uHeight = hHaze; withHeight(hazeMat, "uniform");
-    const haze = new THREE.Mesh(this.hexGeo, hazeMat); haze.position.set(c.pos.x, 0, c.pos.z); haze.scale.set(1.22, 1, 1.22); haze.renderOrder = 2;
-    this.scene.add(core, light, spill, haze);
-    this.actives.push({ s: c.s, core, light, spill, haze, hCore, hHaze, glowMat, glowLo, glowHi, coreMat });
+    const hazeMat = new THREE.MeshBasicMaterial({ color: threeColorOf({ ...hue, l: 0.8 }), transparent: true, opacity: BEACON.shellOpacity[0], depthWrite: false, side: THREE.DoubleSide }); hazeMat.userData.uHeight = hHaze; withHeight(hazeMat, "uniform");
+    const haze = new THREE.Mesh(this.hexGeo, hazeMat); haze.position.set(c.pos.x, 0, c.pos.z); haze.scale.set(BEACON.shell[0], 1, BEACON.shell[0]); haze.renderOrder = 2;
+    // a ring ping that expands from the foot of the column and fades, like a beacon on a map
+    // white, so it reads on every hive color
+    const ring = new THREE.Mesh(this.ringGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthWrite: false }));
+    ring.position.set(c.pos.x, 0.02, c.pos.z); ring.renderOrder = 3;
+    this.scene.add(core, light, spill, haze, ring);
+    this.actives.push({ s: c.s, core, light, spill, haze, ring, hCore, hHaze, phase: Math.random() * PING_SECONDS });
   }
   private heightGeometry(n: number) { const g = this.hexGeo.clone(); g.setAttribute("aHeight", new THREE.InstancedBufferAttribute(new Float32Array(n), 1)); return g; }
   private makeBatch(list: Cell[], material: THREE.Material, depthMat: THREE.Material | null, shadows: boolean) {
@@ -361,7 +380,7 @@ export class WorldEngine {
     for (const m of [this.hexMesh, this.dimMesh, this.ghostMesh]) if (m) { this.scene.remove(m); m.geometry.dispose(); m.dispose(); }
     this.hexMesh = this.dimMesh = this.ghostMesh = null;
     for (const p of this.plates) { this.scene.remove(p); (p.material as THREE.Material).dispose(); }
-    for (const a of this.actives) { this.scene.remove(a.core, a.light, a.spill, a.haze); (a.core.material as THREE.Material).dispose(); (a.spill.material as THREE.Material).dispose(); (a.haze.material as THREE.Material).dispose(); a.glowMat.dispose(); }
+    for (const a of this.actives) { this.scene.remove(a.core, a.light, a.spill, a.haze, a.ring); for (const m of [a.core, a.spill, a.haze, a.ring]) (m.material as THREE.Material).dispose(); }
     this.plates = []; this.actives = [];
   }
   private fitShadowCamera() {
@@ -385,72 +404,6 @@ export class WorldEngine {
     return current + d;
   }
 
-  // ---------------------------------------------------------------- glow (selective, composited as a veil)
-  private makeGlow() {
-    const renderer = this.renderer, pr = renderer.getPixelRatio();
-    const w = Math.max(2, (this.container.clientWidth * pr) | 0), h = Math.max(2, (this.container.clientHeight * pr) | 0);
-    const opts: THREE.RenderTargetOptions = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat, depthBuffer: true, stencilBuffer: false, samples: 4 };
-    const full = new THREE.WebGLRenderTarget(w, h, opts);
-    const half: THREE.RenderTargetOptions = { ...opts, samples: 0, depthBuffer: false, type: THREE.HalfFloatType };
-    const a = new THREE.WebGLRenderTarget(w >> 1, h >> 1, half), b = new THREE.WebGLRenderTarget(w >> 1, h >> 1, half);
-    const blur = new THREE.ShaderMaterial({
-      uniforms: { tDiffuse: { value: null }, step: { value: new THREE.Vector2() } },
-      vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }",
-      fragmentShader: `uniform sampler2D tDiffuse; uniform vec2 step; varying vec2 vUv;
-        void main(){
-          vec4 c = texture2D(tDiffuse, vUv) * 0.2270270270;
-          c += (texture2D(tDiffuse, vUv + step*1.3846153846) + texture2D(tDiffuse, vUv - step*1.3846153846)) * 0.3162162162;
-          c += (texture2D(tDiffuse, vUv + step*3.2307692308) + texture2D(tDiffuse, vUv - step*3.2307692308)) * 0.0702702703;
-          gl_FragColor = c;
-        }`, depthTest: false, depthWrite: false });
-    // on a light background added light is invisible: the blurred glow shape becomes the alpha of a saturated veil in the group hue
-    const add = new THREE.ShaderMaterial({
-      uniforms: { tDiffuse: { value: null }, strength: { value: 0.55 } },
-      vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }",
-      fragmentShader: `uniform sampler2D tDiffuse; uniform float strength; varying vec2 vUv;
-        void main(){
-          vec4 g = texture2D(tDiffuse, vUv);
-          float lum = max(g.r, max(g.g, g.b));
-          vec3 hue = lum > 0.002 ? g.rgb / lum : vec3(0.0);
-          gl_FragColor = vec4(mix(hue, vec3(1.0), 0.45), smoothstep(0.06, 0.7, lum) * strength);
-        }`, transparent: true, depthTest: false, depthWrite: false });
-    const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), blur);
-    const qs = new THREE.Scene(); qs.add(quad);
-    const qc = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-    const blackAttr = withHeight(new THREE.MeshBasicMaterial({ color: 0x000000 }), "attribute");
-    const black = new THREE.MeshBasicMaterial({ color: 0x000000 });
-    return {
-      full, a, b, add, quad, qs, qc, blackAttr, black,
-      setSize: (cw: number, ch: number) => { const p = renderer.getPixelRatio(), W = Math.max(2, (cw * p) | 0), H = Math.max(2, (ch * p) | 0); full.setSize(W, H); a.setSize(W >> 1, H >> 1); b.setSize(W >> 1, H >> 1); },
-      blurPass: (src: THREE.WebGLRenderTarget, dst: THREE.WebGLRenderTarget, dx: number, dy: number) => { blur.uniforms.tDiffuse.value = src.texture; blur.uniforms.step.value.set(dx / src.width, dy / src.height); quad.material = blur; renderer.setRenderTarget(dst); renderer.render(qs, qc); },
-    };
-  }
-  private renderWithGlow() {
-    const { renderer, scene, camera, glow } = this;
-    renderer.setRenderTarget(null);
-    renderer.render(scene, camera);
-    if (!this.actives.length) return;
-    const bg = scene.background; scene.background = null;
-    renderer.shadowMap.autoUpdate = false;
-    const hexM = this.hexMesh?.material, ghostM = this.ghostMesh?.material;
-    if (this.hexMesh) this.hexMesh.material = glow.blackAttr; if (this.ghostMesh) this.ghostMesh.material = glow.blackAttr;
-    const dimV = this.dimMesh?.visible; if (this.dimMesh) this.dimMesh.visible = false;
-    const plateM = this.plates.map((p) => p.material); for (const p of this.plates) p.material = glow.black;
-    const groundM = this.ground.material; (this.ground as THREE.Mesh).material = glow.black; const sfV = this.shadowFloor.visible; this.shadowFloor.visible = false;
-    const ringV = this.hoverRing.visible; this.hoverRing.visible = false;
-    for (const a of this.actives) { a.spill.visible = a.haze.visible = false; a.core.material = a.glowMat; }
-    renderer.setRenderTarget(glow.full); renderer.setClearColor(0x000000, 1); renderer.clear(); renderer.render(scene, camera);
-    if (this.hexMesh && hexM) this.hexMesh.material = hexM; if (this.ghostMesh && ghostM) this.ghostMesh.material = ghostM; if (this.dimMesh) this.dimMesh.visible = dimV!;
-    this.plates.forEach((p, i) => (p.material = plateM[i])); (this.ground as THREE.Mesh).material = groundM; this.shadowFloor.visible = sfV; this.hoverRing.visible = ringV;
-    for (const a of this.actives) { a.spill.visible = a.haze.visible = true; a.core.material = a.coreMat; }
-    scene.background = bg; renderer.shadowMap.autoUpdate = true;
-    glow.blurPass(glow.full, glow.a, 1, 0); glow.blurPass(glow.a, glow.b, 0, 1);
-    glow.blurPass(glow.b, glow.a, 2, 0); glow.blurPass(glow.a, glow.b, 0, 2);
-    glow.blurPass(glow.b, glow.a, 3, 0); glow.blurPass(glow.a, glow.b, 0, 3);
-    glow.add.uniforms.tDiffuse.value = glow.b.texture; glow.quad.material = glow.add;
-    renderer.setRenderTarget(null); renderer.autoClear = false; renderer.render(glow.qs, glow.qc); renderer.autoClear = true;
-  }
-
   // ---------------------------------------------------------------- pointer
   private bindPointer() {
     const canvas = this.renderer.domElement, orbit = this.orbit;
@@ -471,7 +424,7 @@ export class WorldEngine {
       if (!d || d.moved || d.btn !== 0) return;
       const cell = this.pickAt(e);
       if (cell) this.cb.onPick(cell.s.id, e.shiftKey);
-      else if (!e.shiftKey) { const gid = this.pickPlate(e); if (gid) this.cb.onPickPlate(gid); }
+      else if (!e.shiftKey) { const gid = this.pickPlate(e); if (gid) this.cb.onPickPlate(gid); else { this.focusGroup = null; this.focusSession = null; this.cb.onClear(); } }
     });
     canvas.addEventListener("pointerleave", () => this.cb.onHover(null));
     canvas.addEventListener("wheel", (e) => { e.preventDefault(); this.zoom(Math.exp(clamp(e.deltaY, -120, 120) * 0.0012)); }, { passive: false });
@@ -594,20 +547,24 @@ export class WorldEngine {
       for (const m of [this.hexMesh, this.dimMesh]) if (m) { m.instanceMatrix.needsUpdate = true; m.geometry.attributes.aHeight.needsUpdate = true; }
       this.heightsAnimating = moving;
     }
-    const pulse = 0.5 + 0.5 * Math.sin((now / 1000) * 3.0); // one shared, shallow breath for every running session
+    const secs = now / 1000, breath = 0.5 + 0.5 * Math.sin((secs * 2 * Math.PI) / PING_SECONDS); // one shared breath for every running session
+    const mix = (range: number[], k: number) => range[0] + (range[1] - range[0]) * k;
     for (const a of this.actives) {
       const c = this.byId.get(a.s.id); if (!c) continue;
       a.hCore.value = c.h;
-      (a.core.material as THREE.MeshPhysicalMaterial).emissiveIntensity = 0.35 + 0.3 * pulse;
-      a.glowMat.color.copy(a.glowLo).lerp(a.glowHi, pulse);
-      a.light.position.y = c.h + 1; a.light.intensity = 0.35 + 0.25 * pulse;
-      const grow = 1.1 + 0.14 * pulse;
-      a.haze.scale.set(grow, 1, grow); a.hHaze.value = c.h + 0.15 + 0.3 * pulse;
-      (a.haze.material as THREE.MeshBasicMaterial).opacity = 0.26 - 0.16 * pulse;
-      (a.spill.material as THREE.MeshBasicMaterial).opacity = 0.1 + 0.08 * pulse;
+      (a.core.material as THREE.MeshPhysicalMaterial).emissiveIntensity = mix(BEACON.emissive, breath);
+      a.light.position.y = c.h + 1.2; a.light.intensity = mix(BEACON.light, breath);
+      const grow = mix(BEACON.shell, breath);
+      a.haze.scale.set(grow, 1, grow); a.hHaze.value = c.h + 0.2 + 0.5 * breath;
+      (a.haze.material as THREE.MeshBasicMaterial).opacity = mix(BEACON.shellOpacity, breath);
+      (a.spill.material as THREE.MeshBasicMaterial).opacity = 0.22 + 0.16 * breath;
+      const ping = ((secs + a.phase) % PING_SECONDS) / PING_SECONDS; // 0 → 1 then restarts
+      const r = mix(BEACON.ring, ping);
+      a.ring.scale.set(r, 1, r);
+      (a.ring.material as THREE.MeshBasicMaterial).opacity = 0.85 * (1 - ping) * (1 - ping);
     }
     this.updateLabels();
-    this.renderWithGlow();
+    this.renderer.render(this.scene, this.camera);
   }
 }
 

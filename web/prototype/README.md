@@ -22,3 +22,7 @@ and a button that copies `claude --resume <id>`; double-clicking a cell opens it
 It is kept as the reference for the port: when the React version and this file
 disagree about how something should look or behave, this file wins until the
 difference is deliberate.
+
+Deliberate differences of the React UI since 29 Sep 2026: running sessions are drawn as a
+geometric beacon (breathing core, swelling shell, ring ping, point light) instead of this
+file's blurred veil; a click on empty ground clears the focus and selection.

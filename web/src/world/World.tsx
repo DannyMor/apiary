@@ -35,6 +35,7 @@ export function World() {
     const engine = new WorldEngine(host, labels, {
       onPick: (id, additive) => { store.getState().select(id, additive); if (!additive) store.getState().requestCamera({ kind: "session", id }); },
       onPickPlate: (gid) => store.getState().requestCamera({ kind: "group", gid }),
+      onClear: () => { store.getState().clearSelection(); store.getState().setFocus(null, null); store.getState().setHover(null); },
       onHover: (id) => store.getState().setHover(id),
       onView: (g, s) => store.getState().setFocus(g, s, engine.cameraTarget()),
       onOpen: (id) => void store.getState().openSession(id),
