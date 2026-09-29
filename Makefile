@@ -2,14 +2,14 @@
 #   make run          install what is missing, build the UI if stale, serve on http://127.0.0.1:7431
 #   make dev          daemon + Vite dev server with hot reload (UI on http://localhost:5173)
 #   make test         backend tests + ruff, UI tests + typecheck
-#   make help         every target
+#   make              this menu
 
 PORT ?= 7431
 HOST ?= 127.0.0.1
 WEB := web
 WEB_SRC := $(shell find $(WEB)/src -type f 2>/dev/null) $(WEB)/index.html $(WEB)/vite.config.ts $(WEB)/tsconfig.json $(WEB)/package.json
 
-.DEFAULT_GOAL := run
+.DEFAULT_GOAL := help
 .PHONY: run serve dev index config open prototype test test-backend test-web lint fmt setup build clean distclean help check-tools
 
 run: check-tools .venv/.synced $(WEB)/dist/index.html ## Install if needed, build the UI if stale, then serve
@@ -80,5 +80,5 @@ check-tools:
 	@command -v uv >/dev/null || { echo "uv is missing: brew install uv  (https://docs.astral.sh/uv/)"; exit 1; }
 	@command -v npm >/dev/null || { echo "npm is missing: brew install node"; exit 1; }
 
-help: ## This list
-	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n", $$1, $$2}'
+help: ## This menu
+	@echo "Apiary. Targets:"; grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n", $$1, $$2}'
